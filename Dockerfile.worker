@@ -1,0 +1,31 @@
+# Agent Worker Service (for scaling agent processing)
+FROM python:3.10-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements
+COPY backend/requirements.txt .
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt \
+    && pip install --no-cache-dir celery[redis] redis
+
+# Copy backend code
+COPY backend/ .
+
+# Create logs directory
+RUN mkdir -p /app/logs
+
+# Environment for worker
+ENV WORKER_TYPE=agent_worker
+ENV CELERY_BROKER_URL=redis://redis:6379/0
+ENV CELERY_RESULT_BACKEND=redis://redis:6379/0
+
+# Run Celery worker
+CMD ["celery", "-A", "worker.celery_app", "worker", "--loglevel=info", "--concurrency=4"]
+
