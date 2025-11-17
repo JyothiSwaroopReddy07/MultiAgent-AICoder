@@ -7,7 +7,7 @@ import asyncio
 import structlog
 from models.schemas import AgentRole, AgentMessage, MessageType, AgentActivity
 from utils.openai_client import OpenAIClient
-from datetime import datetime
+from datetime import datetime, timezone
 
 logger = structlog.get_logger()
 
@@ -91,7 +91,7 @@ class BaseAgent(ABC):
             agent=self.role,
             action=action,
             status="in_progress",
-            start_time=datetime.utcnow()
+            start_time=datetime.now(timezone.utc)
         )
 
         logger.info(
@@ -106,7 +106,7 @@ class BaseAgent(ABC):
         """Complete the current activity"""
         if self.current_activity:
             self.current_activity.status = status
-            self.current_activity.end_time = datetime.utcnow()
+            self.current_activity.end_time = datetime.now(timezone.utc)
 
             logger.info(
                 "activity_completed",

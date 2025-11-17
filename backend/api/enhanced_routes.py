@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from models.enhanced_schemas import EnhancedCodeGenerationResult, WorkflowPhase
 from models.clarification_schemas import ClarificationResponse, ClarificationAnswer
 from agents.advanced_orchestrator import AdvancedOrchestrator
-from agents.streaming_wrapper import StreamingOrchestrator
+# from agents.streaming_wrapper import StreamingOrchestrator  # Unused, causes circular import
 from utils.openai_client import OpenAIClient
 from utils.llm_tracker import tracker
 from config import get_settings
@@ -39,7 +39,10 @@ def get_advanced_orchestrator() -> AdvancedOrchestrator:
     """Get the advanced orchestrator instance"""
     global advanced_orchestrator
     if advanced_orchestrator is None:
-        raise HTTPException(status_code=500, detail="Advanced orchestrator not initialized")
+        raise HTTPException(
+            status_code=503,  # Service Unavailable
+            detail="System is still initializing. Please wait a moment and try again."
+        )
     return advanced_orchestrator
 
 
@@ -74,6 +77,13 @@ async def generate_code_enhanced(request: EnhancedCodeRequest) -> Dict[str, Any]
 
     Returns comprehensive results with all phase outputs.
     """
+    # Validate description is not empty or whitespace
+    if not request.description or not request.description.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Description cannot be empty. Please provide a valid project description."
+        )
+    
     try:
         logger.info(
             "enhanced_generation_request",
@@ -122,6 +132,13 @@ async def generate_code_interactive(request: EnhancedCodeRequest) -> Dict[str, A
         - Complete result if no clarifications needed
         - Partial result with clarification_request if clarifications needed
     """
+    # Validate description is not empty or whitespace
+    if not request.description or not request.description.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Description cannot be empty. Please provide a valid project description."
+        )
+    
     try:
         logger.info(
             "interactive_generation_request",
@@ -222,7 +239,11 @@ async def get_clarifications(request_id: str) -> Dict[str, Any]:
     if not result:
         raise HTTPException(status_code=404, detail="Request not found")
 
-    if not result.awaiting_clarifications:
+    # Safely check for awaiting_clarifications attribute (might not exist in older result objects)
+    awaiting_clarifications = getattr(result, 'awaiting_clarifications', False)
+    clarification_request = getattr(result, 'clarification_request', None)
+    
+    if not awaiting_clarifications:
         return {
             "awaiting_clarifications": False,
             "clarification_request": None
@@ -230,7 +251,7 @@ async def get_clarifications(request_id: str) -> Dict[str, Any]:
 
     return {
         "awaiting_clarifications": True,
-        "clarification_request": result.clarification_request
+        "clarification_request": clarification_request
     }
 
 
@@ -420,6 +441,17 @@ async def get_enhanced_agents() -> Dict[str, Any]:
 @router.get("/health/enhanced")
 async def health_check_enhanced() -> Dict[str, str]:
     """Enhanced health check"""
+    global advanced_orchestrator
+    
+    # Check if orchestrator is initialized
+    if advanced_orchestrator is None:
+        return {
+            "status": "initializing",
+            "service": "AI Coder - Enhanced Multi-Agent System",
+            "version": "2.0.0",
+            "message": "System is still starting up"
+        }
+    
     return {
         "status": "healthy",
         "service": "AI Coder - Enhanced Multi-Agent System",
