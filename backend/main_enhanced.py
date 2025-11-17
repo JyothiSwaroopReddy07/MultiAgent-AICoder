@@ -13,7 +13,7 @@ from api.routes import router as basic_router
 from api.enhanced_routes import router as enhanced_router, advanced_orchestrator
 from api.streaming_routes import router as streaming_router
 from agents.advanced_orchestrator import AdvancedOrchestrator
-from agents.streaming_wrapper import StreamingOrchestrator
+# from agents.streaming_wrapper import StreamingOrchestrator  # Unused, causes circular import
 from utils.openai_client import OpenAIClient
 from models.schemas import ErrorResponse
 

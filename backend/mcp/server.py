@@ -5,7 +5,7 @@ Handles message routing between agents
 import asyncio
 import json
 from typing import Dict, List, Optional, Set
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 import structlog
 from models.schemas import AgentMessage, AgentRole, MessageType
@@ -73,7 +73,7 @@ class MCPServer:
             recipient=recipient,
             message_type=message_type,
             content=content,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             parent_id=parent_id
         )
 

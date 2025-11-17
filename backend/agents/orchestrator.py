@@ -4,7 +4,7 @@ Orchestrator - Coordinates multi-agent workflow
 import asyncio
 from typing import Dict, Any, Optional
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 import structlog
 from models.schemas import (
     CodeRequest, CodeGenerationResult, AgentActivity,
@@ -63,7 +63,7 @@ class AgentOrchestrator:
         result = CodeGenerationResult(
             request_id=request_id,
             status="in_progress",
-            created_at=datetime.utcnow()
+            created_at=datetime.now(timezone.utc)
         )
 
         self.active_requests[request_id] = result
@@ -135,7 +135,7 @@ class AgentOrchestrator:
 
             # Mark as completed
             result.status = "completed"
-            result.completed_at = datetime.utcnow()
+            result.completed_at = datetime.now(timezone.utc)
 
             logger.info(
                 "code_generation_completed",
@@ -151,7 +151,7 @@ class AgentOrchestrator:
 
         except Exception as e:
             result.status = "failed"
-            result.completed_at = datetime.utcnow()
+            result.completed_at = datetime.now(timezone.utc)
 
             logger.error(
                 "code_generation_failed",
