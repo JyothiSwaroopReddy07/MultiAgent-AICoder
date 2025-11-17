@@ -11,7 +11,6 @@ import json
 import structlog
 from agents.advanced_orchestrator import AdvancedOrchestrator
 from utils.openai_client import get_openai_client
-from mcp.server import MCPServer
 
 logger = structlog.get_logger()
 
@@ -37,8 +36,7 @@ async def generate_code_stream(request_id: str, request_data: dict):
         
         # Initialize services
         openai_client = get_openai_client()
-        mcp_server = MCPServer()
-        orchestrator = AdvancedOrchestrator(mcp_server, openai_client)
+        orchestrator = AdvancedOrchestrator(openai_client)
         
         # Store orchestrator for potential cancellation
         active_generations[request_id] = {
@@ -99,6 +97,14 @@ async def stream_generate(request: StreamGenerateRequest):
     - error: Error occurred
     """
     import uuid
+    
+    # Validate description is not empty or whitespace
+    if not request.description or not request.description.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Description cannot be empty. Please provide a valid project description."
+        )
+    
     request_id = str(uuid.uuid4())
     
     logger.info(

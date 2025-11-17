@@ -5,7 +5,7 @@ Coordinates all agents across 6 phases of software development
 import asyncio
 from typing import Dict, Any, Optional, List
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 import structlog
 
 # Import all enhanced schemas
@@ -160,7 +160,7 @@ class AdvancedOrchestrator:
             request_id=request_id,
             status="in_progress",
             current_phase=WorkflowPhase.DISCOVERY,
-            created_at=datetime.utcnow()
+            created_at=datetime.now(timezone.utc)
         )
 
         self.active_requests[request_id] = result
@@ -173,6 +173,8 @@ class AdvancedOrchestrator:
 
             # Step 1.1: Requirements Analysis
             req_result = await self.requirements_analyst.process_task(request_data)
+            if "requirements" not in req_result:
+                raise ValueError("Requirements analyst did not return 'requirements' key")
             result.requirements = Requirements(**req_result["requirements"])
             if req_result.get("activity"):
                 result.agent_activities.append(req_result["activity"])
@@ -182,6 +184,8 @@ class AdvancedOrchestrator:
                 **request_data,
                 "requirements": result.requirements.model_dump()
             })
+            if "research" not in research_result:
+                raise ValueError("Research agent did not return 'research' key")
             result.research = [ResearchFindings(**r) for r in research_result["research"]]
             if research_result.get("activity"):
                 result.agent_activities.append(research_result["activity"])
@@ -196,6 +200,8 @@ class AdvancedOrchestrator:
                 "requirements": result.requirements.model_dump(),
                 "research": [r.model_dump() for r in result.research]
             })
+            if "hld" not in hld_result:
+                raise ValueError("Architect did not return 'hld' key")
             result.hld = HighLevelDesign(**hld_result["hld"])
             if hld_result.get("activity"):
                 result.agent_activities.append(hld_result["activity"])
@@ -206,6 +212,8 @@ class AdvancedOrchestrator:
                 "hld": result.hld.model_dump(),
                 "requirements": result.requirements.model_dump()
             })
+            if "modules" not in module_result:
+                raise ValueError("Module designer did not return 'modules' key")
             result.modules = [ModuleDesign(**m) for m in module_result["modules"]]
             if module_result.get("activity"):
                 result.agent_activities.append(module_result["activity"])
@@ -216,6 +224,8 @@ class AdvancedOrchestrator:
                 "modules": [m.model_dump() for m in result.modules],
                 "requirements": result.requirements.model_dump()
             })
+            if "lld" not in lld_result:
+                raise ValueError("Component designer did not return 'lld' key")
             result.lld = [LowLevelDesign(**l) for l in lld_result["lld"]]
             if lld_result.get("activity"):
                 result.agent_activities.append(lld_result["activity"])
@@ -227,6 +237,8 @@ class AdvancedOrchestrator:
                 "hld": result.hld.model_dump(),
                 "modules": [m.model_dump() for m in result.modules]
             })
+            if "ui_design" not in ui_result:
+                raise ValueError("UI designer did not return 'ui_design' key")
             result.ui_design = ui_result["ui_design"]
             if ui_result.get("activity"):
                 result.agent_activities.append(ui_result["activity"])
@@ -236,12 +248,16 @@ class AdvancedOrchestrator:
             result.current_phase = WorkflowPhase.IMPLEMENTATION
 
             # Step 3.1: Code Generation (enhanced with design context)
+            # Safely extract dependencies from technology_stack
+            tech_stack = getattr(result.hld, 'technology_stack', {})
+            dependencies = tech_stack.get("dependencies", []) if isinstance(tech_stack, dict) else []
+            
             code_result = await self.coder.process_task({
                 "plan": {
                     "overview": result.hld.system_overview,
                     "steps": [m.purpose for m in result.modules],
                     "file_structure": {m.module_name: m.purpose for m in result.modules},
-                    "dependencies": result.hld.technology_stack.get("dependencies", []),
+                    "dependencies": dependencies,
                     "estimated_complexity": "medium"
                 },
                 "description": request_data.get("description"),
@@ -250,6 +266,8 @@ class AdvancedOrchestrator:
                 "modules": [m.model_dump() for m in result.modules],
                 "lld": [l.model_dump() for l in result.lld]
             })
+            if "code_files" not in code_result:
+                raise ValueError("Coder did not return 'code_files' key")
             result.code_files = code_result["code_files"]
             if code_result.get("activity"):
                 result.agent_activities.append(code_result["activity"])
@@ -260,6 +278,8 @@ class AdvancedOrchestrator:
                 "language": request_data.get("language"),
                 "description": request_data.get("description")
             })
+            if "test_files" not in test_result:
+                raise ValueError("Tester did not return 'test_files' key")
             result.test_files = test_result["test_files"]
             if test_result.get("activity"):
                 result.agent_activities.append(test_result["activity"])
@@ -274,6 +294,8 @@ class AdvancedOrchestrator:
                 "requirements": result.requirements.model_dump(),
                 "language": request_data.get("language")
             })
+            if "security_audit" not in security_result:
+                raise ValueError("Security auditor did not return 'security_audit' key")
             result.security_audit = SecurityAudit(**security_result["security_audit"])
             if security_result.get("activity"):
                 result.agent_activities.append(security_result["activity"])
@@ -298,6 +320,8 @@ class AdvancedOrchestrator:
                 "test_files": result.test_files,
                 "language": request_data.get("language")
             })
+            if "execution_result" not in execution_result:
+                raise ValueError("Executor did not return 'execution_result' key")
             result.execution_result = ExecutionResult(**execution_result["execution_result"])
             if execution_result.get("activity"):
                 result.agent_activities.append(execution_result["activity"])
@@ -310,6 +334,8 @@ class AdvancedOrchestrator:
                     "execution_result": result.execution_result.model_dump(),
                     "test_results": result.execution_result.test_results
                 })
+                if "debug_report" not in debug_result:
+                    raise ValueError("Debugger did not return 'debug_report' key")
                 result.debug_report = DebugReport(**debug_result["debug_report"])
                 if debug_result.get("activity"):
                     result.agent_activities.append(debug_result["activity"])
@@ -321,6 +347,8 @@ class AdvancedOrchestrator:
             monitor_result = await self.monitor.process_task({
                 "agent_activities": result.agent_activities
             })
+            if "agent_health" not in monitor_result:
+                raise ValueError("Monitor did not return 'agent_health' key")
             result.agent_health = [AgentHealthStatus(**h) for h in monitor_result["agent_health"]]
             if monitor_result.get("activity"):
                 result.agent_activities.append(monitor_result["activity"])
@@ -328,14 +356,14 @@ class AdvancedOrchestrator:
             # Get LLM usage summary
             usage_summary = tracker.get_summary()
             result.total_llm_usage = {
-                "total_calls": usage_summary["total_calls"],
-                "total_tokens": usage_summary["total_tokens"]
+                "total_calls": usage_summary.get("total_calls", 0),
+                "total_tokens": usage_summary.get("total_tokens", 0)
             }
-            result.total_cost = usage_summary["total_cost"]
+            result.total_cost = usage_summary.get("total_cost", 0.0)
 
             # Mark as completed
             result.status = "completed"
-            result.completed_at = datetime.utcnow()
+            result.completed_at = datetime.now(timezone.utc)
 
             logger.info(
                 "enhanced_generation_completed",
@@ -350,7 +378,7 @@ class AdvancedOrchestrator:
 
         except Exception as e:
             result.status = "failed"
-            result.completed_at = datetime.utcnow()
+            result.completed_at = datetime.now(timezone.utc)
             result.errors.append(str(e))
 
             logger.error(
@@ -361,6 +389,12 @@ class AdvancedOrchestrator:
             )
 
             raise
+        
+        finally:
+            # Cleanup active request from memory
+            if request_id in self.active_requests:
+                del self.active_requests[request_id]
+                logger.debug("cleaned_up_active_request", request_id=request_id)
 
     async def generate_code_interactive(self, request_data: Dict[str, Any]) -> EnhancedCodeGenerationResult:
         """
@@ -385,7 +419,7 @@ class AdvancedOrchestrator:
             request_id=request_id,
             status="in_progress",
             current_phase=WorkflowPhase.DISCOVERY,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
             original_request=request_data  # Store for resume
         )
 
@@ -432,7 +466,7 @@ class AdvancedOrchestrator:
 
         except Exception as e:
             result.status = "failed"
-            result.completed_at = datetime.utcnow()
+            result.completed_at = datetime.now(timezone.utc)
             result.errors.append(str(e))
 
             logger.error(
@@ -443,6 +477,13 @@ class AdvancedOrchestrator:
             )
 
             raise
+        
+        finally:
+            # Note: Don't cleanup if status is "awaiting_clarifications" - need to resume later
+            if result.status not in ["awaiting_clarifications", "awaiting_tech_stack"]:
+                if request_id in self.active_requests:
+                    del self.active_requests[request_id]
+                    logger.debug("cleaned_up_active_request", request_id=request_id)
 
     async def submit_clarifications(
         self,
@@ -498,7 +539,7 @@ class AdvancedOrchestrator:
 
         except Exception as e:
             result.status = "failed"
-            result.completed_at = datetime.utcnow()
+            result.completed_at = datetime.now(timezone.utc)
             result.errors.append(str(e))
 
             logger.error(
@@ -508,6 +549,13 @@ class AdvancedOrchestrator:
             )
 
             raise
+        
+        finally:
+            # Cleanup on completion or error
+            if result.status not in ["awaiting_tech_stack"]:
+                if request_id in self.active_requests:
+                    del self.active_requests[request_id]
+                    logger.debug("cleaned_up_active_request", request_id=request_id)
 
     async def _continue_workflow_after_clarifications(
         self,
@@ -611,12 +659,16 @@ class AdvancedOrchestrator:
             effective_language = tech_decision.language if tech_decision else request_data.get("language", "python")
 
             # Step 3.1: Code Generation
+            # Safely extract dependencies from technology_stack
+            tech_stack = getattr(result.hld, 'technology_stack', {})
+            dependencies = tech_stack.get("dependencies", []) if isinstance(tech_stack, dict) else []
+            
             code_result = await self.coder.process_task({
                 "plan": {
                     "overview": result.hld.system_overview,
                     "steps": [m.purpose for m in result.modules],
                     "file_structure": {m.module_name: m.purpose for m in result.modules},
-                    "dependencies": result.hld.technology_stack.get("dependencies", []),
+                    "dependencies": dependencies,
                     "estimated_complexity": "medium"
                 },
                 "description": request_data.get("description"),
@@ -685,6 +737,8 @@ class AdvancedOrchestrator:
                     "execution_result": result.execution_result.model_dump(),
                     "test_results": result.execution_result.test_results
                 })
+                if "debug_report" not in debug_result:
+                    raise ValueError("Debugger did not return 'debug_report' key")
                 result.debug_report = DebugReport(**debug_result["debug_report"])
                 if debug_result.get("activity"):
                     result.agent_activities.append(debug_result["activity"])
@@ -696,6 +750,8 @@ class AdvancedOrchestrator:
             monitor_result = await self.monitor.process_task({
                 "agent_activities": result.agent_activities
             })
+            if "agent_health" not in monitor_result:
+                raise ValueError("Monitor did not return 'agent_health' key")
             result.agent_health = [AgentHealthStatus(**h) for h in monitor_result["agent_health"]]
             if monitor_result.get("activity"):
                 result.agent_activities.append(monitor_result["activity"])
@@ -703,14 +759,14 @@ class AdvancedOrchestrator:
             # Get LLM usage summary
             usage_summary = tracker.get_summary()
             result.total_llm_usage = {
-                "total_calls": usage_summary["total_calls"],
-                "total_tokens": usage_summary["total_tokens"]
+                "total_calls": usage_summary.get("total_calls", 0),
+                "total_tokens": usage_summary.get("total_tokens", 0)
             }
-            result.total_cost = usage_summary["total_cost"]
+            result.total_cost = usage_summary.get("total_cost", 0.0)
 
             # Mark as completed
             result.status = "completed"
-            result.completed_at = datetime.utcnow()
+            result.completed_at = datetime.now(timezone.utc)
 
             logger.info(
                 "interactive_generation_completed",
@@ -725,7 +781,7 @@ class AdvancedOrchestrator:
 
         except Exception as e:
             result.status = "failed"
-            result.completed_at = datetime.utcnow()
+            result.completed_at = datetime.now(timezone.utc)
             result.errors.append(str(e))
 
             logger.error(
@@ -736,6 +792,14 @@ class AdvancedOrchestrator:
             )
 
             raise
+        
+        finally:
+            # Cleanup on completion or error (this is called from various places, so cleanup here)
+            if request_id in self.active_requests:
+                # Only cleanup if truly complete or failed
+                if result.status in ["completed", "failed"]:
+                    del self.active_requests[request_id]
+                    logger.debug("cleaned_up_active_request", request_id=request_id)
 
     def get_request_status(self, request_id: str) -> Optional[EnhancedCodeGenerationResult]:
         """Get status of a request"""
@@ -758,7 +822,7 @@ class AdvancedOrchestrator:
             yield {
                 'type': 'started',
                 'request_id': request_id,
-                'timestamp': datetime.utcnow().isoformat()
+                'timestamp': datetime.now(timezone.utc).isoformat()
             }
             
             # Phase 1: Discovery
@@ -891,3 +955,7 @@ class AdvancedOrchestrator:
                 'error': str(e),
                 'request_id': request_id
             }
+        
+        finally:
+            # Always log completion/termination
+            logger.info("streaming_generation_ended", request_id=request_id)

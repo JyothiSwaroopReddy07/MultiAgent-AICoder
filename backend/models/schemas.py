@@ -4,15 +4,50 @@ Data models and schemas for the AI Coder system
 from typing import List, Dict, Optional, Any
 from pydantic import BaseModel, Field
 from enum import Enum
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class AgentRole(str, Enum):
     """Agent roles in the multi-agent system"""
+    # Basic workflow agents (legacy)
     PLANNER = "planner"
     CODER = "coder"
     TESTER = "tester"
     REVIEWER = "reviewer"
+    
+    # Phase 1: Discovery & Analysis
+    REQUIREMENTS_ANALYST = "requirements_analyst"
+    RESEARCH = "research"
+    DOMAIN_EXPERT = "domain_expert"
+    
+    # Phase 2: Design & Planning
+    ARCHITECT = "architect"
+    MODULE_DESIGNER = "module_designer"
+    COMPONENT_DESIGNER = "component_designer"
+    DATABASE_DESIGNER = "database_designer"
+    UI_DESIGNER = "ui_designer"
+    
+    # Phase 3: Implementation
+    CODE_GENERATOR = "code_generator"
+    DOCUMENTATION = "documentation"
+    CONFIGURATION = "configuration"
+    
+    # Phase 4: Quality Assurance
+    TEST_GENERATOR = "test_generator"
+    DEBUGGER = "debugger"
+    SECURITY_AUDITOR = "security_auditor"
+    PERFORMANCE_ANALYZER = "performance_analyzer"
+    CODE_REVIEWER = "code_reviewer"
+    
+    # Phase 5: Validation & Deployment
+    EXECUTOR = "executor"
+    INTEGRATION_TESTER = "integration_tester"
+    DEPLOYMENT_PLANNER = "deployment_planner"
+    
+    # Phase 6: Monitoring & Orchestration
+    MONITOR = "monitor"
+    ERROR_HANDLER = "error_handler"
+    ORCHESTRATOR = "orchestrator"
 
 
 class MessageType(str, Enum):
@@ -48,7 +83,7 @@ class AgentMessage(BaseModel):
     recipient: Optional[AgentRole] = Field(None, description="Target agent (None for broadcast)")
     message_type: MessageType = Field(..., description="Type of message")
     content: Dict[str, Any] = Field(..., description="Message content")
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     parent_id: Optional[str] = Field(None, description="ID of message this responds to")
 
 
@@ -102,7 +137,7 @@ class AgentActivity(BaseModel):
     agent: AgentRole = Field(..., description="Agent role")
     action: str = Field(..., description="Action performed")
     status: str = Field(..., description="Status (in_progress/completed/failed)")
-    start_time: datetime = Field(default_factory=datetime.utcnow)
+    start_time: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     end_time: Optional[datetime] = Field(None)
     llm_usage: Optional[LLMUsage] = Field(None)
 
@@ -118,7 +153,7 @@ class CodeGenerationResult(BaseModel):
     agent_activities: List[AgentActivity] = Field(default=[], description="Agent activity log")
     total_llm_usage: Dict[str, int] = Field(default={}, description="Total LLM usage across all agents")
     total_cost: float = Field(default=0.0, description="Total estimated cost")
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     completed_at: Optional[datetime] = Field(None)
 
     class Config:
@@ -139,4 +174,4 @@ class ErrorResponse(BaseModel):
     """Error response"""
     error: str = Field(..., description="Error message")
     details: Optional[Dict[str, Any]] = Field(None, description="Additional error details")
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
