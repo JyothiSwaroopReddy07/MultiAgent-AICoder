@@ -76,9 +76,19 @@ class OpenAIClient:
                 max_tokens=max_tok
             )
 
+            # Validate response has choices
+            if not response.choices or len(response.choices) == 0:
+                logger.error("openai_empty_response", model=model)
+                raise ValueError("OpenAI API returned empty choices array")
+
             # Extract usage information
             usage_data = response.usage
             content = response.choices[0].message.content
+            
+            # Validate content is not None (can happen with function calls only)
+            if content is None:
+                logger.warning("openai_null_content", model=model, finish_reason=response.choices[0].finish_reason)
+                content = ""  # Default to empty string
 
             # Track usage
             usage = tracker.track_usage(
@@ -142,6 +152,11 @@ class OpenAIClient:
                 temperature=self.temperature
             )
 
+            # Validate response has choices
+            if not response.choices or len(response.choices) == 0:
+                logger.error("openai_empty_response_tools", model=self.model)
+                raise ValueError("OpenAI API returned empty choices array")
+
             # Track usage
             usage_data = response.usage
             usage = tracker.track_usage(
@@ -151,9 +166,14 @@ class OpenAIClient:
             )
 
             message = response.choices[0].message
+            
+            # Validate content (can be None when only tool calls are present)
+            content = message.content if message.content is not None else ""
+            if message.content is None:
+                logger.debug("openai_null_content_with_tools", model=self.model, has_tool_calls=hasattr(message, 'tool_calls'))
 
             return {
-                "content": message.content,
+                "content": content,
                 "tool_calls": message.tool_calls if hasattr(message, 'tool_calls') else None,
                 "usage": usage,
                 "finish_reason": response.choices[0].finish_reason
@@ -162,3 +182,30 @@ class OpenAIClient:
         except Exception as e:
             logger.error("openai_tools_api_error", error=str(e))
             raise
+
+
+# Global client instance (singleton pattern)
+_client_instance: Optional[OpenAIClient] = None
+
+
+def get_openai_client() -> OpenAIClient:
+    """
+    Get or create the global OpenAI client instance (singleton)
+    
+    Returns:
+        OpenAIClient: The global client instance
+    """
+    global _client_instance
+    if _client_instance is None:
+        # Import here to avoid circular dependency
+        from config import get_settings
+        settings = get_settings()
+        
+        _client_instance = OpenAIClient(
+            api_key=settings.openai_api_key,
+            model=settings.openai_model,
+            temperature=settings.temperature,
+            max_tokens=settings.max_tokens
+        )
+        logger.info("openai_client_singleton_created", model=settings.openai_model)
+    return _client_instance

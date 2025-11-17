@@ -47,6 +47,17 @@ function App() {
   
   const readerRef = useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null);
   const activityEndRef = useRef<HTMLDivElement>(null);
+  const isGeneratingRef = useRef<boolean>(false);
+
+  // Cleanup stream on unmount
+  useEffect(() => {
+    return () => {
+      if (readerRef.current) {
+        readerRef.current.cancel().catch(console.error);
+        readerRef.current = null;
+      }
+    };
+  }, []);
 
   // Auto-scroll activity logs
   useEffect(() => {
@@ -65,8 +76,9 @@ function App() {
   };
 
   const handleGenerate = async () => {
-    if (!description.trim()) return;
+    if (!description.trim() || isGeneratingRef.current) return;
 
+    isGeneratingRef.current = true;
     setIsGenerating(true);
     setFiles([]);
     setOpenFiles([]);
@@ -104,17 +116,23 @@ function App() {
       }
 
       const readStream = async () => {
+        let buffer = '';
+        
         while (true) {
           const { done, value } = await reader.read();
           
           if (done) {
             setIsGenerating(false);
+            isGeneratingRef.current = false;
             readerRef.current = null;
             break;
           }
 
-          const chunk = decoder.decode(value, { stream: true });
-          const lines = chunk.split('\n');
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          
+          // Keep last incomplete line in buffer
+          buffer = lines.pop() || '';
 
           for (const line of lines) {
             if (line.startsWith('data: ')) {
@@ -133,6 +151,7 @@ function App() {
         console.error('Stream reading error:', error);
         addActivityLog('error', '❌ Connection error occurred', {});
         setIsGenerating(false);
+        isGeneratingRef.current = false;
         readerRef.current = null;
       });
 
@@ -140,6 +159,12 @@ function App() {
       console.error('Generation failed:', error);
       addActivityLog('error', '❌ Failed to generate code. Please try again.', {});
       setIsGenerating(false);
+      isGeneratingRef.current = false;
+      // Ensure stream is cleaned up
+      if (readerRef.current) {
+        readerRef.current.cancel().catch(console.error);
+        readerRef.current = null;
+      }
     }
   };
 
@@ -153,14 +178,19 @@ function App() {
       case 'phase_started':
         setCurrentPhase(event.phase);
         addActivityLog('phase', `📋 ${event.phase}`, {});
-        const phaseProgress = {
-          'Phase 1: Discovery & Analysis': 20,
-          'Phase 2: Design & Planning': 40,
-          'Phase 3: Implementation': 60,
-          'Phase 4: Quality Assurance': 80,
-          'Phase 5: Validation': 90,
-        };
-        setProgress(phaseProgress[event.phase as keyof typeof phaseProgress] || 0);
+        
+        // Calculate progress dynamically based on phase number
+        const phases = [
+          'Phase 1: Discovery & Analysis',
+          'Phase 2: Design & Planning',
+          'Phase 3: Implementation',
+          'Phase 4: Quality Assurance',
+          'Phase 5: Validation',
+          'Phase 6: Monitoring'
+        ];
+        const phaseIndex = phases.findIndex(p => p === event.phase);
+        const calculatedProgress = phaseIndex >= 0 ? ((phaseIndex + 1) / phases.length) * 90 : 0;
+        setProgress(calculatedProgress);
         break;
 
       case 'agent_started':
@@ -177,32 +207,41 @@ function App() {
         const newFile: CodeFile = event.file;
         setFiles(prev => {
           const updated = [...prev, newFile];
-          // Auto-open first file
-          if (updated.length === 1) {
-            setSelectedFile(newFile);
-            setOpenFiles([newFile]);
-          }
           return updated;
         });
+        
+        // Auto-open first file only if nothing is selected
+        setSelectedFile(current => {
+          if (!current && files.length === 0) {
+            setOpenFiles([newFile]);
+            return newFile;
+          }
+          return current;
+        });
+        
         addActivityLog('file', `📄 Generated ${newFile.filename}`, {});
         break;
 
       case 'completed':
         addActivityLog('success', '🎉 Code generation completed!', event.data);
         setIsGenerating(false);
+        isGeneratingRef.current = false;
         setProgress(100);
         setCurrentPhase('');
         setCurrentAgent('');
-        if (eventSourceRef.current) {
-          eventSourceRef.current.close();
+        if (readerRef.current) {
+          readerRef.current.cancel().catch(console.error);
+          readerRef.current = null;
         }
         break;
 
       case 'error':
         addActivityLog('error', `❌ Error: ${event.error}`, {});
         setIsGenerating(false);
-        if (eventSourceRef.current) {
-          eventSourceRef.current.close();
+        isGeneratingRef.current = false;
+        if (readerRef.current) {
+          readerRef.current.cancel().catch(console.error);
+          readerRef.current = null;
         }
         break;
     }
@@ -210,10 +249,11 @@ function App() {
 
   const cancelGeneration = () => {
     if (readerRef.current) {
-      readerRef.current.cancel();
+      readerRef.current.cancel().catch(console.error);
       readerRef.current = null;
     }
     setIsGenerating(false);
+    isGeneratingRef.current = false;
     addActivityLog('error', '⚠️ Generation cancelled', {});
   };
 
@@ -227,7 +267,7 @@ function App() {
     };
 
     files.forEach(file => {
-      const parts = file.filepath.split('/');
+      const parts = file.filepath.split('/').filter(part => part.trim() !== '');
       let currentNode = root;
 
       parts.forEach((part: string, index: number) => {
@@ -275,15 +315,26 @@ function App() {
   };
 
   const closeFile = (file: CodeFile) => {
-    const newOpenFiles = openFiles.filter(f => f.filepath !== file.filepath);
-    setOpenFiles(newOpenFiles);
-    if (selectedFile?.filepath === file.filepath) {
-      setSelectedFile(newOpenFiles[newOpenFiles.length - 1] || null);
-    }
+    setOpenFiles(prev => {
+      const newOpenFiles = prev.filter(f => f.filepath !== file.filepath);
+      
+      // Update selected file if closing the currently selected one
+      setSelectedFile(current => {
+        if (current?.filepath === file.filepath) {
+          return newOpenFiles[newOpenFiles.length - 1] || null;
+        }
+        return current;
+      });
+      
+      return newOpenFiles;
+    });
   };
 
   const getFileIcon = (name: string) => {
-    const ext = name.split('.').pop()?.toLowerCase();
+    const parts = name.split('.');
+    if (parts.length === 1) return '📄'; // No extension (README, Makefile, etc.)
+    
+    const ext = parts.pop()?.toLowerCase();
     const icons: { [key: string]: string } = {
       py: '🐍', js: '📜', ts: '📘', tsx: '⚛️', jsx: '⚛️',
       java: '☕', go: '🔵', rs: '🦀', html: '🌐', css: '🎨',
