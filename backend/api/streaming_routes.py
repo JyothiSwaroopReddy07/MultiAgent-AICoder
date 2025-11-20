@@ -1,16 +1,28 @@
 """
 Streaming Routes for Real-Time Code Generation
-Provides Server-Sent Events (SSE) for live updates
+Provides Server-Sent Events (SSE) for live updates with validation and error handling
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, validator
 from typing import Optional, List
 import asyncio
 import json
 import structlog
+
 from agents.advanced_orchestrator import AdvancedOrchestrator
 from utils.openai_client import get_openai_client
+from utils.validators import (
+    validate_description,
+    validate_database_preference,
+    sanitize_string,
+    ValidationError
+)
+from constants import (
+    MIN_DESCRIPTION_LENGTH,
+    MAX_DESCRIPTION_LENGTH,
+    ErrorMessages
+)
 
 logger = structlog.get_logger()
 
@@ -21,10 +33,51 @@ active_generations = {}
 
 
 class StreamGenerateRequest(BaseModel):
-    description: str
-    language: str = "python"
-    framework: Optional[str] = None
-    requirements: List[str] = []
+    """Request model for streaming code generation with validation"""
+    
+    description: str = Field(
+        ...,
+        min_length=MIN_DESCRIPTION_LENGTH,
+        max_length=MAX_DESCRIPTION_LENGTH,
+        description="Project description"
+    )
+    database_preference: str = Field(
+        default="auto",
+        description="Database preference: 'auto', 'postgresql', or 'mongodb'"
+    )
+    
+    @validator('description')
+    def validate_description_field(cls, v):
+        """Validate and sanitize description"""
+        if not v or not v.strip():
+            raise ValueError("Description cannot be empty")
+        
+        # Sanitize input
+        sanitized = sanitize_string(v, max_length=MAX_DESCRIPTION_LENGTH)
+        
+        # Validate
+        is_valid, error = validate_description(sanitized)
+        if not is_valid:
+            raise ValueError(error)
+        
+        return sanitized
+    
+    @validator('database_preference')
+    def validate_database_preference_field(cls, v):
+        """Validate database preference"""
+        v = v.lower().strip()
+        is_valid, error = validate_database_preference(v)
+        if not is_valid:
+            raise ValueError(error)
+        return v
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "description": "Build a Next.js e-commerce application with user authentication, product catalog, shopping cart, and checkout process",
+                "database_preference": "auto"
+            }
+        }
 
 
 async def generate_code_stream(request_id: str, request_data: dict):
@@ -87,37 +140,39 @@ async def stream_generate(request: StreamGenerateRequest):
     """
     Start streaming code generation with real-time updates
     
-    Returns SSE stream with events:
-    - started: Generation started
-    - phase_started: New phase began
-    - agent_activity: Agent is working
-    - file_generated: New file created
-    - file_content_chunk: Partial file content
-    - completed: Generation finished
-    - error: Error occurred
+    Validates input, initializes orchestrator, and streams events in real-time.
+    
+    Args:
+        request: StreamGenerateRequest with description and database_preference
+    
+    Returns:
+        StreamingResponse: SSE stream with events:
+        - started: Generation started
+        - phase_started: New phase began
+        - agent_activity: Agent is working
+        - file_generated: New file created
+        - file_content_chunk: Partial file content
+        - completed: Generation finished
+        - error: Error occurred
+    
+    Raises:
+        HTTPException: If validation fails (handled by Pydantic)
     """
     import uuid
-    
-    # Validate description is not empty or whitespace
-    if not request.description or not request.description.strip():
-        raise HTTPException(
-            status_code=400,
-            detail="Description cannot be empty. Please provide a valid project description."
-        )
     
     request_id = str(uuid.uuid4())
     
     logger.info(
         "stream_generation_started",
         request_id=request_id,
-        description=request.description[:100]
+        description=request.description[:100],
+        database_preference=request.database_preference
     )
     
+    # Prepare request data for orchestrator
     request_data = {
         "description": request.description,
-        "language": request.language,
-        "framework": request.framework or "",
-        "requirements": request.requirements
+        "database_preference": request.database_preference,
     }
     
     return StreamingResponse(
@@ -128,6 +183,7 @@ async def stream_generate(request: StreamGenerateRequest):
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",  # Disable nginx buffering
             "Access-Control-Allow-Origin": "*",
+            "Content-Type": "text/event-stream",
         }
     )
 

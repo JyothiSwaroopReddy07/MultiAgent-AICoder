@@ -38,7 +38,7 @@ class DebuggerAgent(BaseAgent):
 5. Suggest precise fixes for each issue
 6. Validate that fixes work
 
-🧠 **USE CHAIN OF THOUGHT REASONING**
+ **USE CHAIN OF THOUGHT REASONING**
 
 Think step-by-step when debugging:
 

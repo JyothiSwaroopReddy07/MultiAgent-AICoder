@@ -53,7 +53,7 @@ Your designs should:
 - Support dark mode (if applicable)
 - Have consistent visual language
 
-🧠 **USE CHAIN OF THOUGHT REASONING**
+ **USE CHAIN OF THOUGHT REASONING**
 
 Think step-by-step when designing UI/UX:
 

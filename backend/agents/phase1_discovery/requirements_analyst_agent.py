@@ -39,7 +39,7 @@ class RequirementsAnalystAgent(BaseAgent):
 6. Create user stories with acceptance criteria
 7. Identify implicit requirements not explicitly stated
 
-🧠 **USE CHAIN OF THOUGHT REASONING**
+ **USE CHAIN OF THOUGHT REASONING**
 
 Think step-by-step when analyzing requirements:
 

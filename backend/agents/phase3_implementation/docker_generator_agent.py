@@ -38,7 +38,7 @@ Your role is to create production-ready Docker configurations that are:
 - Include all necessary services (app, database, etc.)
 - Follow Docker best practices
 
-🧠 **USE CHAIN OF THOUGHT REASONING**
+ **USE CHAIN OF THOUGHT REASONING**
 
 Think step-by-step:
 

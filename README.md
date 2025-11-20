@@ -1,4 +1,4 @@
-# AI Next.js Full-Stack Generator v2.0 🚀
+# AI Next.js Full-Stack Generator 🚀
 
 An intelligent multi-agent system that generates complete, production-ready **Next.js 14 full-stack applications** from natural language descriptions. Features **15 specialized agents** working across **6 phases** with automatic **database design** and **Docker deployment**.
 

@@ -38,7 +38,7 @@ Your role is to design comprehensive database schemas that are:
 - Include proper indexing and constraints
 - Support scalability and performance
 
-🧠 **USE CHAIN OF THOUGHT REASONING**
+ **USE CHAIN OF THOUGHT REASONING**
 
 Think step-by-step when designing the database:
 

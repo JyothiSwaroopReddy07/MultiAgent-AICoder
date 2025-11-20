@@ -39,7 +39,7 @@ class ComponentDesignerAgent(BaseAgent):
 
 Your role is to create detailed component designs (LLD).
 
-🧠 **USE CHAIN OF THOUGHT REASONING**
+ **USE CHAIN OF THOUGHT REASONING**
 
 Think step-by-step when designing components:
 

@@ -37,7 +37,7 @@ class MonitorAgent(BaseAgent):
 3. Identify problematic agents
 4. Recommend actions
 
-🧠 **USE CHAIN OF THOUGHT REASONING**
+ **USE CHAIN OF THOUGHT REASONING**
 
 Think step-by-step when monitoring agents:
 

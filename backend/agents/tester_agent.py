@@ -30,7 +30,7 @@ class TesterAgent(BaseAgent):
 4. Follow testing best practices and patterns
 5. Ensure code coverage and quality
 
-🧠 **USE CHAIN OF THOUGHT REASONING**
+ **USE CHAIN OF THOUGHT REASONING**
 
 Think step-by-step when writing tests:
 

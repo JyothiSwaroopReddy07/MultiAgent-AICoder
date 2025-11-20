@@ -39,7 +39,7 @@ Your role is to make informed technology stack decisions based on:
 3. Business constraints (budget, team size, timeline)
 4. Trade-offs between different options
 
-🧠 **USE CHAIN OF THOUGHT REASONING**
+ **USE CHAIN OF THOUGHT REASONING**
 
 For each technology decision, think step-by-step:
 

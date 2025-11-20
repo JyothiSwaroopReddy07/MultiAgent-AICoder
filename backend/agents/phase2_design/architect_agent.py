@@ -42,7 +42,7 @@ class ArchitectAgent(BaseAgent):
 
 Your role is to create comprehensive High-Level Designs (HLD) for software systems.
 
-🧠 **USE CHAIN OF THOUGHT REASONING**
+ **USE CHAIN OF THOUGHT REASONING**
 
 Think step-by-step when designing the architecture:
 
