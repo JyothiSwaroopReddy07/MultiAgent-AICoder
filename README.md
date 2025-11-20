@@ -1,105 +1,134 @@
-# AI Coder v2.0 - Multi-Agent Code Generation System 🚀
+# AI Next.js Full-Stack Generator v2.0 🚀
 
-An intelligent multi-agent system that generates complete, production-ready software applications from natural language descriptions. Features **13 specialized agents** working across **6 phases** with **chain-of-thought reasoning**.
+An intelligent multi-agent system that generates complete, production-ready **Next.js 14 full-stack applications** from natural language descriptions. Features **15 specialized agents** working across **6 phases** with automatic **database design** and **Docker deployment**.
+
+**Fixed Tech Stack:**
+- ⚛️ **Frontend:** Next.js 14 (App Router) + TypeScript + Tailwind CSS
+- 🔌 **Backend:** Next.js API Routes (REST)
+- 🗄️ **Database:** PostgreSQL/MongoDB (auto-selected)
+- 🔷 **ORM/ODM:** Prisma (PostgreSQL) or Mongoose (MongoDB)
+- 🐳 **Deployment:** Docker + docker-compose
+- 🧪 **Testing:** Jest + React Testing Library
 
 ## ✨ Key Features
 
-- 🤖 **13 Specialized AI Agents** - Each expert in their domain
+### Next.js Full-Stack Specialization 🎯
+- 🎨 **No Language Choice** - Always generates Next.js 14 with TypeScript
+- 🗄️ **Auto Database Design** - PostgreSQL or MongoDB selected based on use case
+- 🔷 **ORM/ODM Included** - Complete Prisma or Mongoose schemas generated
+- 🐳 **Docker Ready** - Multi-stage Dockerfile + docker-compose generated
+- 📦 **Complete Project** - 30-40 production-ready files in one generation
+
+### Core Capabilities
+- 🤖 **15 Specialized AI Agents** - Each expert in their domain
 - 🧠 **Chain of Thought Prompting** - Systematic reasoning for better outputs
-- 🔄 **Interactive Clarification** - System asks questions when needed
-- 📊 **Complete SDLC Coverage** - From requirements to monitoring
-- 🎨 **UI/UX Design** - Automatic interface design with accessibility
+- 🔄 **Real-Time Streaming** - Watch code being generated live
+- 📊 **Complete SDLC Coverage** - From requirements to deployment
+- 🎨 **Modern Stack** - Next.js 14 App Router, Server Components
 - 🔒 **Security Auditing** - OWASP Top 10 vulnerability scanning
 - 📈 **LLM Usage Tracking** - Monitor API calls and costs
-- 🌐 **Model Context Protocol** - Advanced agent communication
 
 ---
 
 ## 🏗️ Architecture
 
-### The 13 Agents
+### The 15 Agents
 
 #### **Phase 1: Discovery & Analysis** 🔍
 1. **Requirements Analyst** - Extracts functional/non-functional requirements, business rules, user stories
 2. **Interactive Requirements Analyst** - Asks clarifying questions when confidence is low
-3. **Research Agent** - Finds best practices, libraries, design patterns, security considerations
-4. **Tech Stack Decision Agent** - Makes informed technology choices based on requirements
+3. **Research Agent** - Finds best practices for Next.js, database design, security considerations
+4. **Tech Stack Decision Agent** - Confirms Next.js stack and selects database type
 
 #### **Phase 2: Design & Planning** 🎨
-5. **Architect** - Creates High-Level Design (HLD), system architecture, scalability strategy
-6. **Module Designer** - Plans module structure following SOLID principles
-7. **Component Designer** - Creates Low-Level Design (LLD) with detailed class designs
-8. **UI Designer** - Designs complete UI/UX with components, accessibility, responsive design
+5. **Architect** - Creates High-Level Design (HLD) for Next.js architecture
+6. **Database Designer** ⭐ **NEW** - Designs complete database schema (PostgreSQL/MongoDB)
+7. **Module Designer** - Plans Next.js module structure (App Router organization)
+8. **Component Designer** - Creates Low-Level Design (LLD) for React components
+9. **UI Designer** - Designs complete UI/UX with Tailwind CSS components
 
 #### **Phase 3: Implementation** 💻
-9. **Code Generator** - Generates production-ready code with documentation
-10. **Test Generator** - Creates comprehensive unit and integration tests
+10. **Next.js Coder** ⭐ **NEW** - Generates complete Next.js 14 application (30-40 files)
+11. **Test Generator** - Creates Jest + React Testing Library tests
+12. **Docker Generator** ⭐ **NEW** - Generates Dockerfile, docker-compose, and deployment config
 
 #### **Phase 4: Quality Assurance** ✅
-11. **Security Auditor** - OWASP Top 10 vulnerability analysis with fixes
-12. **Debugger** - Finds and suggests fixes for bugs
-13. **Code Reviewer** - Reviews code quality, provides scores and approval
+13. **Security Auditor** - OWASP Top 10 vulnerability analysis with fixes
+14. **Code Reviewer** - Reviews code quality, provides scores and approval
 
 #### **Phase 5: Validation** ⚡
-14. **Executor** - Validates code execution and test results
+15. **Executor** - Validates code execution and test results
 
 #### **Phase 6: Monitoring** 📊
-15. **Monitor** - Tracks agent health, success rates, response times
+16. **Monitor** - Tracks agent health, success rates, response times
 
 ### Workflow
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  User Request: "Build a todo app with authentication"      │
-└─────────────────────┬───────────────────────────────────────┘
-                      │
-        ┌─────────────▼─────────────┐
-        │  Phase 1: Discovery       │
-        │  - Requirements Analysis  │
-        │  - Technology Research    │
-        │  - Tech Stack Decision    │
-        └─────────────┬─────────────┘
-                      │
-        ┌─────────────▼─────────────┐
-        │  Phase 2: Design          │
-        │  - Architecture (HLD)     │
-        │  - Modules                │
-        │  - Components (LLD)       │
-        │  - UI/UX Design           │
-        └─────────────┬─────────────┘
-                      │
-        ┌─────────────▼─────────────┐
-        │  Phase 3: Implementation  │
-        │  - Code Generation        │
-        │  - Test Generation        │
-        └─────────────┬─────────────┘
-                      │
-        ┌─────────────▼─────────────┐
-        │  Phase 4: QA              │
-        │  - Security Audit         │
-        │  - Debugging              │
-        │  - Code Review            │
-        └─────────────┬─────────────┘
-                      │
-        ┌─────────────▼─────────────┐
-        │  Phase 5: Validation      │
-        │  - Execution Check        │
-        └─────────────┬─────────────┘
-                      │
-        ┌─────────────▼─────────────┐
-        │  Phase 6: Monitoring      │
-        │  - Agent Health Check     │
-        └─────────────┬─────────────┘
-                      │
-        ┌─────────────▼─────────────┐
-        │  Complete Package         │
-        │  - 15+ Requirements       │
-        │  - Architecture Docs      │
-        │  - 8-12 Code Files        │
-        │  - 6-10 Test Files        │
-        │  - Security Report        │
-        │  - Quality Review         │
-        └───────────────────────────┘
+┌────────────────────────────────────────────────────────────────────┐
+│  User: "Build a blog platform with posts, comments, and likes"    │
+│  Database: Auto-select (Recommended)                               │
+└──────────────────────────┬─────────────────────────────────────────┘
+                           │
+        ┌──────────────────▼──────────────────┐
+        │  Phase 1: Discovery & Analysis      │
+        │  ✓ Requirements Analysis            │
+        │  ✓ Next.js Best Practices Research  │
+        │  ✓ Database Type Selection          │
+        └──────────────────┬──────────────────┘
+                           │
+        ┌──────────────────▼──────────────────┐
+        │  Phase 2: Design & Planning         │
+        │  ✓ Next.js Architecture (HLD)       │
+        │  ✓ DATABASE SCHEMA DESIGN ⭐        │
+        │    • PostgreSQL selected            │
+        │    • User, Post, Comment, Like      │
+        │    • Prisma schema generated        │
+        │    • Relationships & indexes        │
+        │  ✓ App Router Module Structure      │
+        │  ✓ React Component Design (LLD)     │
+        │  ✓ Tailwind UI/UX Design            │
+        └──────────────────┬──────────────────┘
+                           │
+        ┌──────────────────▼──────────────────┐
+        │  Phase 3: Implementation            │
+        │  ✓ NEXT.JS CODE GENERATION ⭐       │
+        │    • app/ directory (App Router)    │
+        │    • API Routes for all entities    │
+        │    • Server & Client Components     │
+        │    • Prisma integration             │
+        │    • TypeScript + Tailwind          │
+        │    Output: 25-35 files              │
+        │  ✓ Test Generation (Jest + RTL)     │
+        │  ✓ DOCKER CONFIGURATION ⭐          │
+        │    • Multi-stage Dockerfile         │
+        │    • docker-compose.yml             │
+        │    • .env.example                   │
+        └──────────────────┬──────────────────┘
+                           │
+        ┌──────────────────▼──────────────────┐
+        │  Phase 4: Quality Assurance         │
+        │  ✓ Security Audit (OWASP Top 10)    │
+        │  ✓ Code Review                      │
+        └──────────────────┬──────────────────┘
+                           │
+        ┌──────────────────▼──────────────────┐
+        │  Phase 5: Validation                │
+        │  ✓ Execution Check                  │
+        └──────────────────┬──────────────────┘
+                           │
+        ┌──────────────────▼──────────────────┐
+        │  Complete Next.js Project           │
+        │  📦 30-40 Production-Ready Files    │
+        │  ✓ Next.js 14 App (Frontend + API)  │
+        │  ✓ Database Schema + Migrations     │
+        │  ✓ Docker Deployment Ready          │
+        │  ✓ Comprehensive Tests              │
+        │  ✓ Configuration Files              │
+        │  ✓ README with Instructions         │
+        │                                     │
+        │  🚀 Deploy: docker-compose up -d    │
+        └─────────────────────────────────────┘
 ```
 
 ---
@@ -190,21 +219,33 @@ cd frontend && npm start
 
 ## 📖 Usage
 
-### Example 1: Basic Request
+### Web UI (Recommended)
+
+1. **Open Browser:** http://localhost:3000
+2. **Enter Description:**
+   ```
+   Build a blog platform with posts, comments, likes,
+   user authentication, and markdown editor
+   ```
+3. **Select Database:** Auto-select (or choose PostgreSQL/MongoDB)
+4. **Click "Generate Next.js App"**
+5. **Watch Real-Time Generation** - See files being created live!
+6. **Download All Files**
+
+### API Request (Alternative)
 
 ```bash
-curl -X POST "http://localhost:8000/api/v2/generate/enhanced" \
+curl -X POST "http://localhost:8500/api/v2/generate/stream" \
   -H "Content-Type: application/json" \
   -d '{
-    "description": "Create a REST API for a todo list with user authentication",
-    "language": "python",
-    "framework": "fastapi",
+    "description": "Build a task management app with projects, tasks, and team collaboration",
+    "database": "auto",
     "requirements": [
-      "CRUD operations for todos",
-      "User registration and login",
-      "JWT authentication",
-      "SQLite database",
-      "Input validation"
+      "User authentication",
+      "Project management",
+      "Task assignment",
+      "Real-time updates",
+      "File attachments"
     ]
   }'
 ```
@@ -247,47 +288,92 @@ curl -X POST "http://localhost:8000/api/v2/generate/enhanced/{request_id}/clarif
 
 ### What You Get
 
-For a **Todo API** request, you receive:
+For a **Blog Platform** request, you receive:
 
 **📋 Phase 1: Discovery**
 - 15+ functional requirements
 - 8+ non-functional requirements
-- Security and performance requirements
-- Technology research findings
-- Informed tech stack decisions
+- Next.js best practices research
+- Database type selection (PostgreSQL/MongoDB)
 
 **🎨 Phase 2: Design**
-- Complete system architecture (HLD)
-- Module breakdown with SOLID principles
-- Detailed class designs (LLD)
-- Full UI/UX design with components
+- Next.js App Router architecture
+- **Complete Database Schema** (⭐ New):
+  - Entity models (User, Post, Comment, Like)
+  - Relationships and foreign keys
+  - Indexes for performance
+  - Prisma schema or Mongoose models
+- Component structure (Server & Client)
+- Tailwind UI component library
 
 **💻 Phase 3: Implementation**
-- **Code Files (8-12 files)**:
-  - `main.py` - FastAPI application
-  - `models.py` - Pydantic models
-  - `database.py` - Database setup
-  - `auth.py` - Authentication
-  - `routers/todos.py` - Todo endpoints
-  - `services/todo_service.py` - Business logic
-  - `config.py` - Configuration
-  - `requirements.txt` - Dependencies
+- **Next.js Application (25-35 files)**:
+  ```
+  app/
+  ├── api/                    # API Routes
+  │   ├── auth/
+  │   │   ├── login/route.ts
+  │   │   └── register/route.ts
+  │   ├── posts/
+  │   │   ├── route.ts        # GET, POST
+  │   │   └── [id]/route.ts   # GET, PUT, DELETE
+  │   └── comments/route.ts
+  ├── dashboard/page.tsx      # Server Component
+  ├── posts/
+  │   └── [id]/page.tsx
+  ├── layout.tsx              # Root layout
+  └── page.tsx                # Home page
 
-- **Test Files (6-10 files)**:
-  - `tests/test_todos.py` - Todo tests
-  - `tests/test_auth.py` - Auth tests
-  - `tests/conftest.py` - Pytest fixtures
+  components/
+  ├── ui/                     # Reusable components
+  │   ├── Button.tsx
+  │   └── Card.tsx
+  └── forms/
+      └── PostForm.tsx        # Client Component
+
+  lib/
+  └── db.ts                   # Prisma/Mongoose setup
+
+  prisma/                     # For PostgreSQL
+  └── schema.prisma           # Complete schema
+
+  models/                     # For MongoDB
+  ├── User.ts
+  └── Post.ts
+  ```
+
+- **Test Files (8-12 files)**:
+  - API route tests (Jest)
+  - Component tests (React Testing Library)
+  - Integration tests
+
+- **Docker Configuration (5 files)** (⭐ New):
+  - `Dockerfile` - Multi-stage build
+  - `docker-compose.yml` - All services
+  - `docker-compose.dev.yml` - Development
+  - `.dockerignore` - Build optimization
+  - `.env.example` - Environment template
+
+- **Configuration Files**:
+  - `package.json` - All dependencies
+  - `next.config.js` - Next.js config
+  - `tailwind.config.ts` - Tailwind setup
+  - `tsconfig.json` - TypeScript config
+  - `jest.config.js` - Test configuration
 
 **✅ Phase 4: Quality Assurance**
 - Security audit report (OWASP Top 10)
-- Bug analysis with suggested fixes
 - Code quality review with scores
 
 **⚡ Phase 5: Validation**
 - Execution validation results
 
-**📊 Phase 6: Monitoring**
-- Agent health status
+**📊 Total Output**
+- **30-40 production-ready files**
+- **Complete full-stack application**
+- **Database schema + migrations**
+- **Docker deployment ready**
+- **Comprehensive test suite**
 
 ---
 
@@ -297,21 +383,23 @@ For a **Todo API** request, you receive:
 
 | Metric | Value |
 |--------|-------|
-| **Total Time** | 6-8 minutes |
-| **Token Usage** | ~30,000-35,000 tokens |
-| **Cost (GPT-4)** | ~$0.40-0.70 per generation |
-| **Agents Used** | 13 specialized agents |
-| **Code Files** | 8-12 production files |
-| **Test Files** | 6-10 comprehensive tests |
+| **Total Time** | 6-10 minutes |
+| **Token Usage** | ~40,000-50,000 tokens |
+| **Cost (GPT-4)** | ~$0.60-1.00 per generation |
+| **Agents Used** | 16 specialized agents |
+| **Code Files** | 25-35 Next.js files |
+| **Test Files** | 8-12 comprehensive tests |
+| **Docker Files** | 5 deployment files |
+| **Total Output** | **30-40 production-ready files** |
 
 ### Cost Breakdown
 
-- Discovery & Analysis: ~$0.12
-- Design & Planning: ~$0.25
-- Implementation: ~$0.15
+- Discovery & Analysis: ~$0.15
+- Design & Planning (+ Database): ~$0.35
+- Implementation (+ Docker): ~$0.30
 - Quality Assurance: ~$0.12
 - Validation: ~$0.04
-- Monitoring: ~$0.01
+- Monitoring: ~$0.02
 
 ### Quality Metrics
 
@@ -319,6 +407,7 @@ For a **Todo API** request, you receive:
 - Average Code Quality Score: **8.5/10**
 - Average Test Coverage: **80%+**
 - Agent Success Rate: **95%+**
+- **Ready to Deploy**: **docker-compose up -d**
 
 ---
 
@@ -458,44 +547,97 @@ Result: Comprehensive, well-reasoned requirements
 
 ## 📁 Project Structure
 
+### Generator Codebase:
 ```
 ai-coder/
 ├── backend/
-│   ├── agents/                      # All 13 agents
-│   │   ├── phase1_discovery/       # Requirements, Research, Tech Decision
-│   │   ├── phase2_design/          # Architect, Module, Component, UI
-│   │   ├── phase4_qa/              # Security, Debugger
-│   │   ├── phase5_validation/      # Executor
-│   │   ├── phase6_monitoring/      # Monitor
-│   │   ├── coder_agent.py          # Code generation
-│   │   ├── tester_agent.py         # Test generation
-│   │   ├── reviewer_agent.py       # Code review
-│   │   └── advanced_orchestrator.py # Coordinates all agents
+│   ├── agents/                            # All 16 agents
+│   │   ├── phase1_discovery/             # Requirements, Research, Tech Decision
+│   │   ├── phase2_design/                # Architect, Database, Module, Component, UI
+│   │   │   ├── database_designer_agent.py  ⭐ NEW
+│   │   │   └── ...
+│   │   ├── phase3_implementation/        # Next.js Code, Tests, Docker
+│   │   │   ├── nextjs_coder_agent.py      ⭐ NEW
+│   │   │   └── docker_generator_agent.py  ⭐ NEW
+│   │   ├── phase4_qa/                    # Security, Code Review
+│   │   ├── phase5_validation/            # Executor
+│   │   ├── phase6_monitoring/            # Monitor
+│   │   └── advanced_orchestrator.py      # Coordinates all agents
 │   ├── api/
-│   │   ├── routes.py               # Basic API routes
-│   │   └── enhanced_routes.py      # Enhanced API routes
+│   │   ├── streaming_routes.py           # Real-time streaming API
+│   │   └── enhanced_routes.py            # Enhanced API routes
 │   ├── models/
-│   │   ├── schemas.py              # Basic models
-│   │   ├── enhanced_schemas.py     # Enhanced models
-│   │   ├── clarification_schemas.py # Clarification models
-│   │   └── ui_schemas.py           # UI design models
-│   ├── mcp/                        # Model Context Protocol
+│   │   └── enhanced_schemas.py           # All schemas
 │   ├── utils/
-│   │   ├── llm_tracker.py          # Token/cost tracking
-│   │   └── openai_client.py        # OpenAI integration
-│   ├── main.py                     # Basic server
-│   ├── main_enhanced.py            # Enhanced server
+│   │   ├── llm_tracker.py                # Token/cost tracking
+│   │   └── openai_client.py              # OpenAI integration
+│   ├── main_enhanced.py                  # Main server
 │   └── requirements.txt
-├── frontend/
+├── frontend/                              # VS Code-like UI
 │   └── src/
-│       ├── components/             # React components
-│       ├── services/               # API services
-│       └── types/                  # TypeScript types
-├── tests/                          # Test suite
-├── docs/                           # Documentation
-├── start.sh                        # Startup script (Unix)
-├── start.bat                       # Startup script (Windows)
-└── README.md                       # This file
+│       ├── App.tsx                        # Main component (Monaco Editor)
+│       ├── components/                    # React components
+│       └── services/                      # API services
+├── docs/                                  # Documentation
+└── README.md                              # This file
+```
+
+### Generated Next.js Project Structure:
+```
+my-generated-app/                          # Your generated application
+├── app/                                   # Next.js App Router
+│   ├── api/                              # API Routes (Backend)
+│   │   ├── auth/
+│   │   │   ├── login/route.ts
+│   │   │   └── register/route.ts
+│   │   ├── [resource]/
+│   │   │   ├── route.ts                  # GET, POST
+│   │   │   └── [id]/route.ts             # GET, PUT, DELETE
+│   ├── (auth)/                           # Route groups
+│   │   ├── login/page.tsx
+│   │   └── register/page.tsx
+│   ├── dashboard/
+│   │   └── page.tsx                      # Server Component
+│   ├── layout.tsx                        # Root layout
+│   └── page.tsx                          # Home page
+│
+├── components/                            # React Components
+│   ├── ui/                               # Reusable UI (Tailwind)
+│   │   ├── Button.tsx
+│   │   ├── Input.tsx
+│   │   └── Card.tsx
+│   └── forms/                            # Form components
+│       └── LoginForm.tsx                 # Client Component
+│
+├── lib/                                  # Utilities
+│   ├── db.ts                             # Database connection
+│   └── utils.ts                          # Helper functions
+│
+├── prisma/                               # PostgreSQL (if selected)
+│   └── schema.prisma                     # Complete schema
+│
+├── models/                               # MongoDB (if selected)
+│   ├── User.ts                           # Mongoose models
+│   └── [Entity].ts
+│
+├── __tests__/                            # Tests
+│   ├── api/                              # API tests
+│   ├── components/                       # Component tests
+│   └── integration/                      # Integration tests
+│
+├── Dockerfile                            # Production Docker image
+├── docker-compose.yml                    # All services
+├── docker-compose.dev.yml                # Development
+├── .dockerignore                         # Build optimization
+├── .env.example                          # Environment template
+│
+├── package.json                          # Dependencies
+├── next.config.js                        # Next.js configuration
+├── tailwind.config.ts                    # Tailwind CSS
+├── tsconfig.json                         # TypeScript
+├── jest.config.js                        # Testing
+│
+└── README.md                             # Setup instructions
 ```
 
 ---
@@ -671,19 +813,60 @@ See **[kubernetes/KUBERNETES_DEPLOYMENT.md](kubernetes/KUBERNETES_DEPLOYMENT.md)
 
 ### Perfect For
 
-✅ **Production Applications** - Enterprise-grade code  
-✅ **MVPs & Prototypes** - Rapid development  
-✅ **Learning** - See best practices in action  
-✅ **Code Reviews** - Get second opinions  
-✅ **Architecture Planning** - Design before coding  
-✅ **Security Audits** - Find vulnerabilities  
-✅ **Team Projects** - Consistent code quality  
+✅ **Next.js Full-Stack Apps** - Complete frontend + backend  
+✅ **MVPs & Prototypes** - Production-ready in minutes  
+✅ **SaaS Applications** - Multi-tenant ready  
+✅ **E-commerce Stores** - Products, cart, checkout  
+✅ **Blogs & CMS** - Content management systems  
+✅ **Social Platforms** - Posts, comments, likes  
+✅ **Project Management** - Tasks, teams, workflows  
+✅ **CRM Systems** - Contacts, deals, pipelines  
+✅ **Admin Dashboards** - Data visualization  
+✅ **Learning Projects** - See Next.js best practices  
+
+### Example Projects You Can Generate
+
+**1. Blog Platform**
+```
+"Build a blog with posts, comments, categories, tags,
+markdown editor, and user authentication"
+```
+Output: 35+ files, PostgreSQL, Docker ready
+
+**2. E-commerce Store**
+```
+"Create an online store with products, shopping cart,
+checkout, orders, and payment integration structure"
+```
+Output: 40+ files, PostgreSQL with Prisma, complete checkout flow
+
+**3. Task Management**
+```
+"Build a project management tool with teams, projects,
+tasks, file attachments, and real-time updates"
+```
+Output: 38+ files, MongoDB with Mongoose, real-time ready
+
+**4. Social Media Platform**
+```
+"Create a social network with posts, comments, likes,
+followers, messaging, and notifications"
+```
+Output: 42+ files, PostgreSQL, WebSocket structure included
+
+**5. CRM System**
+```
+"Build a CRM with contacts, companies, deals, activities,
+and email integration"
+```
+Output: 36+ files, PostgreSQL, business logic included
 
 ### Not Ideal For
 
-❌ Complex legacy code migration  
-❌ Highly specialized domains (without customization)  
-❌ Real-time code execution (validation only)  
+❌ Non-Next.js applications (Python, Java, etc.)  
+❌ Mobile-first apps (but generates responsive web)  
+❌ Microservices architecture (generates monolithic Next.js)  
+❌ Real-time execution validation (no sandbox)  
 
 ---
 
@@ -786,24 +969,38 @@ GET /api/v2/agents/enhanced
 
 ---
 
-## 📈 Comparison: v1.0 vs v2.0
+## 📈 Comparison: Generic vs Next.js Specialized
 
-| Feature | v1.0 (Basic) | v2.0 (Enhanced) |
-|---------|-------------|-----------------|
-| **Agents** | 4 | 13 ✨ |
-| **Phases** | 3 | 6 ✨ |
-| **Chain of Thought** | ❌ | ✅ ✨ |
-| **Interactive Clarification** | ❌ | ✅ ✨ |
-| **Requirements Analysis** | Basic | Comprehensive ✨ |
-| **Research** | ❌ | ✅ ✨ |
-| **Architecture Design** | Simple | HLD + Modules + LLD ✨ |
-| **UI/UX Design** | ❌ | Complete ✨ |
-| **Security Audit** | Basic review | OWASP Top 10 ✨ |
-| **Debugging** | Manual | Automated ✨ |
-| **Monitoring** | ❌ | Full health check ✨ |
-| **Cost** | ~$0.15 | ~$0.50 |
-| **Time** | 2-3 min | 6-8 min |
-| **Production Ready** | Partial | Full ✅ |
+| Feature | Generic Multi-Language | Next.js Full-Stack Generator |
+|---------|----------------------|------------------------------|
+| **Languages** | 6+ (Python, JS, Java, Go, Rust, etc.) | **1** (Next.js + TypeScript only) ✨ |
+| **Frontend** | Varies | **Next.js 14 App Router** ✨ |
+| **Backend** | Separate servers | **Next.js API Routes** (same app) ✨ |
+| **Database** | ❌ Not included | **Auto-designed** (PostgreSQL/MongoDB) ✨ |
+| **ORM/ODM** | ❌ Not included | **Prisma or Mongoose** (generated) ✨ |
+| **Migrations** | ❌ Manual | **Auto-generated** ✨ |
+| **Docker** | ❌ Not included | **Complete setup** (multi-service) ✨ |
+| **Deployment** | Manual configuration | **docker-compose up -d** ✨ |
+| **Type Safety** | Depends on language | **TypeScript throughout** ✨ |
+| **Styling** | Varies | **Tailwind CSS** ✨ |
+| **Testing** | Basic | **Jest + RTL + API tests** ✨ |
+| **Agents** | 13 | **16** (+Database, NextJS, Docker) ✨ |
+| **Output Files** | 8-12 | **30-40 production-ready** ✨ |
+| **Setup Time** | Hours | **5 minutes** ✨ |
+| **Cost** | ~$0.40-0.70 | ~$0.60-1.00 |
+| **Time** | 6-8 min | 6-10 min |
+| **Production Ready** | Partial | **Fully ready** ✅ |
+
+### Key Advantages of Next.js Specialization
+
+✅ **No Choice Paralysis** - One battle-tested stack  
+✅ **Complete Solution** - Database + Docker included  
+✅ **Faster Deployment** - One command: `docker-compose up`  
+✅ **Modern Stack** - Latest Next.js 14 with App Router  
+✅ **Type Safe** - TypeScript everywhere  
+✅ **Performance** - Server Components, optimized builds  
+✅ **Best Practices** - Industry-standard architecture  
+✅ **Scalable** - Proper database design with indexes
 
 ---
 
@@ -826,6 +1023,103 @@ GET /api/v2/agents/enhanced
 
 ---
 
+## 🚀 Deploying Generated Applications
+
+### Quick Deploy with Docker (Recommended)
+
+```bash
+# Extract generated files
+unzip my-nextjs-app.zip
+cd my-nextjs-app
+
+# Configure environment
+cp .env.example .env
+# Edit .env with your values
+
+# Deploy with Docker (includes database)
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Your app is now running on http://localhost:3000
+```
+
+### Local Development
+
+```bash
+# Install dependencies
+npm install
+
+# Set up database (PostgreSQL)
+npx prisma generate
+npx prisma migrate dev
+
+# Or set up database (MongoDB)
+# Just configure MONGODB_URI in .env
+
+# Run development server
+npm run dev
+
+# Open http://localhost:3000
+```
+
+### Production Deployment
+
+#### Vercel (Easiest)
+```bash
+# Install Vercel CLI
+npm i -g vercel
+
+# Deploy (includes database via Vercel Postgres)
+vercel --prod
+```
+
+#### Docker Production
+```bash
+# Build production image
+docker-compose -f docker-compose.yml build
+
+# Run in production mode
+docker-compose up -d
+
+# Access at your domain
+```
+
+#### Traditional Server
+```bash
+# Build for production
+npm run build
+
+# Start production server
+npm start
+
+# Use PM2 for process management
+pm2 start npm --name "my-app" -- start
+```
+
+### Environment Variables
+
+Generated `.env.example`:
+```env
+# Database (PostgreSQL)
+DATABASE_URL="postgresql://user:password@localhost:5432/mydb"
+
+# Or Database (MongoDB)
+MONGODB_URI="mongodb://localhost:27017/mydb"
+
+# Next.js
+NEXT_PUBLIC_API_URL="http://localhost:3000"
+NEXTAUTH_SECRET="your-secret-key-here"
+NEXTAUTH_URL="http://localhost:3000"
+
+# Optional
+UPLOADTHING_SECRET="your-upload-secret"
+STRIPE_SECRET_KEY="your-stripe-key"
+```
+
+---
+
 ## 🤝 Contributing
 
 Contributions are welcome! Areas for improvement:
@@ -845,7 +1139,7 @@ Contributions are welcome! Areas for improvement:
 
 ## 🐛 Troubleshooting
 
-### Common Issues
+### Generator Issues
 
 **Issue: OpenAI API errors**
 - Check API key in `.env`
@@ -853,18 +1147,65 @@ Contributions are welcome! Areas for improvement:
 - Check network connection
 
 **Issue: Port already in use**
-- Change `BACKEND_PORT` or `FRONTEND_PORT` in `.env`
-- Kill processes using ports 3000/8000
+- Change `BACKEND_PORT` in `.env` (backend)
+- Kill process using port 3000 (frontend) or 8500 (backend)
+```bash
+lsof -ti:3000 | xargs kill -9  # macOS/Linux
+```
 
-**Issue: Agents timing out**
-- Increase `MAX_TOKENS` in `.env`
-- Check OpenAI API status
-- Review agent logs
+**Issue: Frontend not showing tech stack**
+- Clear browser cache (Ctrl+Shift+Delete)
+- Restart frontend: `npm start`
+- Check console for errors (F12)
+
+**Issue: Generation timing out**
+- This is normal for complex apps (can take 10 minutes)
+- Watch activity log for progress
+- Don't refresh the page
+- Check backend logs if it fails
 
 **Issue: High costs**
-- Use GPT-3.5-turbo instead of GPT-4
-- Use basic workflow for simple tasks
-- Monitor usage with built-in tracker
+- Each generation costs ~$0.60-1.00 with GPT-4
+- Use GPT-3.5-turbo for testing (change in backend config)
+- Monitor usage in OpenAI dashboard
+
+### Generated App Issues
+
+**Issue: Docker build fails**
+- Check Docker is running
+- Verify `.env` file exists
+- Check database connection string
+- View logs: `docker-compose logs`
+
+**Issue: Prisma errors**
+```bash
+# Regenerate Prisma client
+npx prisma generate
+
+# Reset database
+npx prisma migrate reset
+
+# Create new migration
+npx prisma migrate dev
+```
+
+**Issue: MongoDB connection errors**
+- Verify MONGODB_URI in `.env`
+- Check MongoDB is running (Docker or local)
+- Check network connectivity
+
+**Issue: Next.js build errors**
+```bash
+# Clear Next.js cache
+rm -rf .next
+
+# Reinstall dependencies
+rm -rf node_modules package-lock.json
+npm install
+
+# Rebuild
+npm run build
+```
 
 ---
 
@@ -893,8 +1234,46 @@ MIT License - See LICENSE file for details
 
 ---
 
-**AI Coder v2.0** - From idea to production-ready code in minutes! 🚀
+## 🎯 Quick Start Summary
 
-Built with ❤️ using AI + Human collaboration
+```bash
+# 1. Start Generator
+cd backend && python main_enhanced.py     # Terminal 1
+cd frontend && npm start                   # Terminal 2
 
-*"The best code is code you don't have to write"*
+# 2. Generate App
+Open http://localhost:3000
+Enter: "Build a blog platform with posts and comments"
+Click "Generate Next.js App"
+Watch real-time generation!
+
+# 3. Deploy Generated App
+cd my-generated-app
+docker-compose up -d
+# Done! App running on http://localhost:3000
+```
+
+---
+
+## 🌟 What Makes This Special
+
+Unlike traditional no-code tools that limit you to templates:
+
+✅ **Complete Freedom** - Describe any app, get custom solution  
+✅ **Real Code** - Not drag-and-drop, actual Next.js TypeScript  
+✅ **Production Ready** - Not prototypes, deployable applications  
+✅ **Full Stack** - Frontend, backend, database, Docker - all included  
+✅ **Modern Stack** - Latest Next.js 14, not outdated tech  
+✅ **Transparent** - Watch AI build it, see every file being created  
+✅ **Deployable** - One command: `docker-compose up -d`  
+✅ **Editable** - Get the source code, customize as needed  
+
+---
+
+**AI Next.js Full-Stack Generator v2.0** - From idea to deployed application in minutes! 🚀
+
+Generate complete Next.js applications with just a description!
+
+Built with ❤️ using AI + Next.js + Docker
+
+*"Why write code when AI can generate production-ready applications?"*
