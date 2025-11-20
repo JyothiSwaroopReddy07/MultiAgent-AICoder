@@ -1,4 +1,6 @@
+# ============================================================================
 # Python
+# ============================================================================
 __pycache__/
 *.py[cod]
 *$py.class
@@ -7,6 +9,7 @@ __pycache__/
 env/
 venv/
 ENV/
+.venv/
 build/
 develop-eggs/
 dist/
@@ -19,49 +22,191 @@ parts/
 sdist/
 var/
 wheels/
+pip-wheel-metadata/
+share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+MANIFEST
 
-# Node
+# PyInstaller
+*.manifest
+*.spec
+
+# Unit test / coverage
+.pytest_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# ============================================================================
+# Node.js / Frontend
+# ============================================================================
 node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+lerna-debug.log*
+pnpm-debug.log*
 .pnp/
 .pnp.js
-coverage/
-build/
-.DS_Store
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
 
-# IDEs
+# Next.js
+.next/
+out/
+
+# Production builds
+build/
+dist/
+
+# Testing
+coverage/
+
+# Misc
+.DS_Store
+*.pem
+
+# Debug
+.env*.local
+.vercel
+
+# Turbo
+.turbo
+
+# ============================================================================
+# IDEs and Editors
+# ============================================================================
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
+*.sublime-project
+*.sublime-workspace
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.tmproj
+.vscode-test
+.history
 
-# Environment
+# ============================================================================
+# Environment Variables
+# ============================================================================
 .env
-.env.local
+.env.*
+!.env.example
+.envrc
 
-# Generated code
+# ============================================================================
+# Generated Code & Output
+# ============================================================================
 generated_code/
+generated/
 output/
+temp/
+tmp/
+*.tmp
+*.temp
+*.bak
 
+# ============================================================================
 # Logs
+# ============================================================================
 *.log
+*.log.*
 logs/
+backend/logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# OS
+# ============================================================================
+# Operating System
+# ============================================================================
+# macOS
 .DS_Store
-Thumbs.db
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
 
-# Testing
-.pytest_cache/
-.coverage
-htmlcov/
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# ============================================================================
+# Database
+# ============================================================================
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+
+# ============================================================================
+# Docker
+# ============================================================================
+docker-compose.override.yml
+*.pid
+*.seed
+*.pid.lock
+
+# ============================================================================
+# Security & Secrets
+# ============================================================================
+*.pem
+*.key
+*.cert
+*.crt
+secrets/
+.secrets/
+
+# ============================================================================
+# CI/CD
+# ============================================================================
+.github/workflows/secrets.yml
+
+# ============================================================================
+# Misc
+# ============================================================================
+*.orig
+*.rej
+.cache/

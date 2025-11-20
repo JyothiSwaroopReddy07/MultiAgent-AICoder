@@ -1,12 +1,16 @@
 """
 Base Agent class - Foundation for all specialized agents
+Implements best practices: error handling, timeout, logging, activity tracking
 """
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional, List
 import asyncio
 import structlog
+
 from models.schemas import AgentRole, AgentMessage, MessageType, AgentActivity
 from utils.openai_client import OpenAIClient
+from utils.decorators import timeout, log_execution_time, handle_errors
+from constants import AGENT_TIMEOUT, DEFAULT_MAX_TOKENS
 from datetime import datetime, timezone
 
 logger = structlog.get_logger()
@@ -115,6 +119,8 @@ class BaseAgent(ABC):
                 status=status
             )
 
+    @timeout(AGENT_TIMEOUT)
+    @log_execution_time(log_level="debug")
     async def call_llm(
         self,
         messages: List[Dict[str, str]],
@@ -122,17 +128,39 @@ class BaseAgent(ABC):
         max_tokens: Optional[int] = None
     ) -> str:
         """
-        Call LLM with automatic tracking
+        Call LLM with automatic tracking, timeout, and logging
+        
+        Implements best practices:
+        - Timeout protection (5 minutes default)
+        - Execution time logging
+        - Usage tracking
+        - Error handling via OpenAI client retry logic
 
         Args:
             messages: Conversation messages
             temperature: Optional temperature override
-            max_tokens: Optional max_tokens override
+            max_tokens: Optional max_tokens override (defaults to 4000)
 
         Returns:
             LLM response content
+            
+        Raises:
+            TimeoutError: If call exceeds timeout
+            APIError: If OpenAI API fails after retries
         """
         system_prompt = self.get_system_prompt()
+        
+        # Use default max_tokens if not specified
+        if max_tokens is None:
+            max_tokens = DEFAULT_MAX_TOKENS
+        
+        logger.debug(
+            "llm_call_started",
+            agent=self.role.value,
+            messages_count=len(messages),
+            temperature=temperature,
+            max_tokens=max_tokens
+        )
 
         response = await self.openai.chat_completion(
             messages=messages,
@@ -144,6 +172,13 @@ class BaseAgent(ABC):
         # Track usage in current activity
         if self.current_activity:
             self.current_activity.llm_usage = response["usage"]
+        
+        logger.debug(
+            "llm_call_completed",
+            agent=self.role.value,
+            tokens_used=response["usage"]["total_tokens"],
+            model=response.get("model", "unknown")
+        )
 
         return response["content"]
 

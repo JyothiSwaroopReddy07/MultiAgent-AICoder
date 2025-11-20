@@ -43,7 +43,7 @@ class ResearchAgent(BaseAgent):
 
 Your role is to provide research findings on technologies and approaches for software projects.
 
-🧠 **USE CHAIN OF THOUGHT REASONING**
+ **USE CHAIN OF THOUGHT REASONING**
 
 Think step-by-step when researching:
 

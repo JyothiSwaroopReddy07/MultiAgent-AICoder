@@ -86,7 +86,7 @@ function App() {
     setActivityLogs([]);
     setProgress(0);
     
-    addActivityLog('phase', '🚀 Starting code generation...', {});
+    addActivityLog('phase', '[START] Starting code generation...', {});
 
     try {
       // First, initiate the generation with POST
@@ -150,7 +150,7 @@ function App() {
 
       readStream().catch(error => {
         console.error('Stream reading error:', error);
-        addActivityLog('error', '❌ Connection error occurred', {});
+        addActivityLog('error', '[ERROR] Connection error occurred', {});
         setIsGenerating(false);
         isGeneratingRef.current = false;
         readerRef.current = null;
@@ -158,7 +158,7 @@ function App() {
 
     } catch (error) {
       console.error('Generation failed:', error);
-      addActivityLog('error', '❌ Failed to generate code. Please try again.', {});
+      addActivityLog('error', '[ERROR] Failed to generate code. Please try again.', {});
       setIsGenerating(false);
       isGeneratingRef.current = false;
       // Ensure stream is cleaned up
@@ -172,13 +172,13 @@ function App() {
   const handleStreamEvent = (event: any) => {
     switch (event.type) {
       case 'started':
-        addActivityLog('success', '✅ Generation started', { request_id: event.request_id });
+        addActivityLog('success', '[OK] Generation started', { request_id: event.request_id });
         setProgress(5);
         break;
 
       case 'phase_started':
         setCurrentPhase(event.phase);
-        addActivityLog('phase', `📋 ${event.phase}`, {});
+        addActivityLog('phase', `[PHASE] ${event.phase}`, {});
         
         // Calculate progress dynamically based on phase number
         const phases = [
@@ -196,11 +196,11 @@ function App() {
 
       case 'agent_started':
         setCurrentAgent(event.agent);
-        addActivityLog('agent', `🤖 ${event.agent}: ${event.activity}`, {});
+        addActivityLog('agent', `[AGENT] ${event.agent}: ${event.activity}`, {});
         break;
 
       case 'agent_completed':
-        addActivityLog('success', `✓ ${event.agent} completed`, event.data);
+        addActivityLog('success', `[OK] ${event.agent} completed`, event.data);
         setCurrentAgent('');
         break;
 
@@ -220,11 +220,11 @@ function App() {
           return current;
         });
         
-        addActivityLog('file', `📄 Generated ${newFile.filename}`, {});
+        addActivityLog('file', `[FILE] Generated ${newFile.filename}`, {});
         break;
 
       case 'completed':
-        addActivityLog('success', '🎉 Code generation completed!', event.data);
+        addActivityLog('success', '[SUCCESS] Code generation completed!', event.data);
         setIsGenerating(false);
         isGeneratingRef.current = false;
         setProgress(100);
@@ -237,7 +237,7 @@ function App() {
         break;
 
       case 'error':
-        addActivityLog('error', `❌ Error: ${event.error}`, {});
+        addActivityLog('error', `[ERROR] Error: ${event.error}`, {});
         setIsGenerating(false);
         isGeneratingRef.current = false;
         if (readerRef.current) {
@@ -255,7 +255,7 @@ function App() {
     }
     setIsGenerating(false);
     isGeneratingRef.current = false;
-    addActivityLog('error', '⚠️ Generation cancelled', {});
+    addActivityLog('error', '[WARN] Generation cancelled', {});
   };
 
   // Build folder tree from flat file list
@@ -335,37 +335,37 @@ function App() {
     const parts = name.split('.');
     
     // Special file names
-    if (name === 'package.json') return '📦';
-    if (name === 'tsconfig.json') return '⚙️';
-    if (name === 'next.config.js' || name === 'next.config.ts') return '⚡';
-    if (name === 'tailwind.config.js' || name === 'tailwind.config.ts') return '🎨';
-    if (name === 'Dockerfile') return '🐳';
-    if (name === 'docker-compose.yml') return '🐋';
-    if (name === '.env' || name === '.env.local' || name === '.env.example') return '🔐';
-    if (name === 'README.md') return '📖';
-    if (parts.length === 1) return '📄';
+    if (name === 'package.json') return '[PKG]';
+    if (name === 'tsconfig.json') return '[CFG]';
+    if (name === 'next.config.js' || name === 'next.config.ts') return '[CFG]';
+    if (name === 'tailwind.config.js' || name === 'tailwind.config.ts') return '[CFG]';
+    if (name === 'Dockerfile') return '[DOC]';
+    if (name === 'docker-compose.yml') return '[DOC]';
+    if (name === '.env' || name === '.env.local' || name === '.env.example') return '[ENV]';
+    if (name === 'README.md') return '[MD]';
+    if (parts.length === 1) return '[F]';
     
     const ext = parts.pop()?.toLowerCase();
     const icons: { [key: string]: string } = {
-      tsx: '⚛️',
-      jsx: '⚛️',
-      ts: '📘',
-      js: '📜',
-      html: '🌐',
-      css: '🎨',
-      scss: '🎨',
-      json: '📋',
-      md: '📝',
-      yml: '⚙️',
-      yaml: '⚙️',
-      txt: '📄',
-      sql: '🗄️',
-      sh: '⚡',
-      env: '🔐',
-      prisma: '🔷',
-      gitignore: '🚫'
+      tsx: '[TSX]',
+      jsx: '[JSX]',
+      ts: '[TS]',
+      js: '[JS]',
+      html: '[HTML]',
+      css: '[CSS]',
+      scss: '[SCSS]',
+      json: '[JSON]',
+      md: '[MD]',
+      yml: '[YML]',
+      yaml: '[YML]',
+      txt: '[TXT]',
+      sql: '[SQL]',
+      sh: '[SH]',
+      env: '[ENV]',
+      prisma: '[PRI]',
+      gitignore: '[GIT]'
     };
-    return icons[ext || ''] || '📄';
+    return icons[ext || ''] || '[F]';
   };
 
   const getLanguageMode = (language: string): string => {
@@ -530,23 +530,18 @@ function App() {
                 <div className="text-sm font-medium text-gray-300 mb-3">Tech Stack (Fixed):</div>
                 <div className="space-y-2 text-sm text-gray-400">
                   <div className="flex items-center gap-2">
-                    <span className="text-blue-400">⚛️</span>
                     <span><strong>Frontend:</strong> Next.js 14 + TypeScript + Tailwind CSS</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-green-400">🔌</span>
                     <span><strong>Backend:</strong> Next.js API Routes (REST)</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-purple-400">🗄️</span>
                     <span><strong>Database:</strong> PostgreSQL / MongoDB (auto-selected)</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-cyan-400">🐳</span>
                     <span><strong>Deployment:</strong> Docker + docker-compose</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-yellow-400">🧪</span>
                     <span><strong>Testing:</strong> Jest + React Testing Library</span>
                   </div>
                 </div>
@@ -659,9 +654,9 @@ function App() {
 
               {/* Status Bar */}
               <div className="bg-blue-600 px-4 py-2 flex gap-6 text-xs text-white">
-                <span>📝 {selectedFile.content.split('\n').length} lines</span>
-                  <span>💾 {(selectedFile.content.length / 1024).toFixed(1)} KB</span>
-                  <span>🔤 {selectedFile.language.toUpperCase()}</span>
+                <span>{selectedFile.content.split('\n').length} lines</span>
+                  <span>{(selectedFile.content.length / 1024).toFixed(1)} KB</span>
+                  <span>{selectedFile.language.toUpperCase()}</span>
                 </div>
             </>
           ) : (

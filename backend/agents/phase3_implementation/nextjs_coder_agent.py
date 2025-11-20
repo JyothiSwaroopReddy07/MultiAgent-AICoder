@@ -42,7 +42,7 @@ class NextJSCoderAgent(BaseAgent):
 - **Prisma ORM** (PostgreSQL) or **Mongoose ODM** (MongoDB)
 - Modern React patterns and best practices
 
-🧠 **USE CHAIN OF THOUGHT REASONING**
+ **USE CHAIN OF THOUGHT REASONING**
 
 Think step-by-step when generating code:
 

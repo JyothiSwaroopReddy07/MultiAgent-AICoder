@@ -1,11 +1,14 @@
 """
-OpenAI client wrapper with usage tracking
+OpenAI client wrapper with usage tracking, retry logic, and error handling
 """
 import os
 from typing import Optional, List, Dict, Any
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, RateLimitError, APITimeoutError, APIConnectionError
 import structlog
+
 from utils.llm_tracker import tracker
+from utils.decorators import retry_with_backoff, timeout, log_execution_time
+from constants import REQUEST_TIMEOUT, MAX_RETRIES
 
 logger = structlog.get_logger()
 
@@ -32,6 +35,12 @@ class OpenAIClient:
         self.client = AsyncOpenAI(api_key=self.api_key)
         logger.info("openai_client_initialized", model=self.model)
 
+    @retry_with_backoff(
+        max_retries=MAX_RETRIES,
+        exceptions=(RateLimitError, APITimeoutError, APIConnectionError)
+    )
+    @timeout(REQUEST_TIMEOUT)
+    @log_execution_time(log_level="debug")
     async def chat_completion(
         self,
         messages: List[Dict[str, str]],
@@ -41,7 +50,7 @@ class OpenAIClient:
         use_fallback: bool = False
     ) -> Dict[str, Any]:
         """
-        Create a chat completion with usage tracking
+        Create a chat completion with usage tracking, retry logic, and timeout
 
         Args:
             messages: List of message dicts with 'role' and 'content'
@@ -52,6 +61,11 @@ class OpenAIClient:
 
         Returns:
             Dict with 'content' and 'usage' keys
+            
+        Raises:
+            TimeoutError: If request exceeds timeout
+            RateLimitError: If rate limit is exceeded after retries
+            APIError: For other API errors
         """
         # Prepend system message if provided
         if system_prompt:
@@ -123,6 +137,12 @@ class OpenAIClient:
 
             raise
 
+    @retry_with_backoff(
+        max_retries=MAX_RETRIES,
+        exceptions=(RateLimitError, APITimeoutError, APIConnectionError)
+    )
+    @timeout(REQUEST_TIMEOUT)
+    @log_execution_time(log_level="debug")
     async def generate_with_tools(
         self,
         messages: List[Dict[str, str]],
@@ -130,7 +150,7 @@ class OpenAIClient:
         system_prompt: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Generate completion with function/tool calling
+        Generate completion with function/tool calling, retry logic, and timeout
 
         Args:
             messages: List of message dicts
@@ -139,6 +159,11 @@ class OpenAIClient:
 
         Returns:
             Dict with completion and tool calls
+            
+        Raises:
+            TimeoutError: If request exceeds timeout
+            RateLimitError: If rate limit is exceeded after retries
+            APIError: For other API errors
         """
         if system_prompt:
             messages = [{"role": "system", "content": system_prompt}] + messages

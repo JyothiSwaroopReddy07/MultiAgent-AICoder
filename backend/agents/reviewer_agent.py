@@ -31,7 +31,7 @@ class ReviewerAgent(BaseAgent):
 4. Assess code against industry standards
 5. Provide constructive feedback
 
-🧠 **USE CHAIN OF THOUGHT REASONING**
+ **USE CHAIN OF THOUGHT REASONING**
 
 Think step-by-step when reviewing code:
 

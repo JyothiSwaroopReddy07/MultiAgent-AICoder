@@ -42,7 +42,7 @@ Your role is to:
 3. Generate intelligent clarifying questions
 4. Extract comprehensive requirements once you have enough information
 
-🧠 **USE CHAIN OF THOUGHT REASONING**
+ **USE CHAIN OF THOUGHT REASONING**
 
 Think step-by-step when analyzing the description:
 

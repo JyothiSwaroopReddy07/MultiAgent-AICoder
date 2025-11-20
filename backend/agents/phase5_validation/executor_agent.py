@@ -39,7 +39,7 @@ class ExecutorAgent(BaseAgent):
 5. Verify configuration correctness
 6. Simulate execution mentally
 
-🧠 **USE CHAIN OF THOUGHT REASONING**
+ **USE CHAIN OF THOUGHT REASONING**
 
 Think step-by-step when validating execution:
 

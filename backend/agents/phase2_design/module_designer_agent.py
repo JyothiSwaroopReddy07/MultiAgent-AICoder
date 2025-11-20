@@ -37,7 +37,7 @@ class ModuleDesignerAgent(BaseAgent):
 4. Managing module dependencies
 5. Ensuring high cohesion and low coupling
 
-🧠 **USE CHAIN OF THOUGHT REASONING**
+ **USE CHAIN OF THOUGHT REASONING**
 
 Think step-by-step when designing modules:
 

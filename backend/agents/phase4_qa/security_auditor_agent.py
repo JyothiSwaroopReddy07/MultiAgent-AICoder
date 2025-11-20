@@ -42,7 +42,7 @@ class SecurityAuditorAgent(BaseAgent):
 7. Review dependency security
 8. Assess overall security posture
 
-🧠 **USE CHAIN OF THOUGHT REASONING**
+ **USE CHAIN OF THOUGHT REASONING**
 
 Think step-by-step when performing security audit:
 
