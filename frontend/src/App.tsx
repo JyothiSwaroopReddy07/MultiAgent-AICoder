@@ -410,25 +410,29 @@ function App() {
 
     if (node.type === 'folder') {
       return (
-        <div key={node.path}>
+        <div key={node.path} className="animate-in">
           <div
-            className={`flex items-center gap-2 px-2 py-1 cursor-pointer hover:bg-gray-700 ${
-              isSelected ? 'bg-gray-700' : ''
+            className={`flex items-center gap-2 px-2 py-1.5 cursor-pointer transition-colors group ${
+              isSelected ? 'bg-gray-700/50' : 'hover:bg-gray-700/30'
             }`}
             style={{ paddingLeft: `${depth * 12 + 8}px` }}
             onClick={() => toggleFolder(node.path)}
           >
-            {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-            <FolderTree size={14} className="text-blue-400" />
-            <span className="text-sm text-gray-200">{node.name}</span>
+            {isExpanded ? (
+              <ChevronDown size={14} className="text-gray-400 group-hover:text-blue-400 transition-colors" />
+            ) : (
+              <ChevronRight size={14} className="text-gray-400 group-hover:text-blue-400 transition-colors" />
+            )}
+            <FolderTree size={14} className="text-blue-400 flex-shrink-0" />
+            <span className="text-xs md:text-sm text-gray-200 truncate flex-1">{node.name}</span>
             {node.children && (
-              <span className="ml-auto text-xs text-gray-500 bg-gray-700 px-2 rounded-full">
+              <span className="ml-auto text-xs text-gray-500 bg-gray-700/50 px-1.5 py-0.5 rounded-full flex-shrink-0">
                 {node.children.length}
               </span>
             )}
           </div>
           {isExpanded && node.children && (
-            <div>
+            <div className="animate-in">
               {node.children.map(child => renderTreeNode(child, depth + 1))}
             </div>
           )}
@@ -441,14 +445,18 @@ function App() {
     return (
       <div
         key={node.path}
-        className={`flex items-center gap-2 px-2 py-1 cursor-pointer hover:bg-gray-700 ${
-          isSelected ? 'bg-blue-600/30 border-l-2 border-blue-500' : ''
+        className={`flex items-center gap-2 px-2 py-1.5 cursor-pointer transition-all group ${
+          isSelected 
+            ? 'bg-blue-600/30 border-l-2 border-blue-500 text-white' 
+            : 'hover:bg-gray-700/30 text-gray-300'
         }`}
         style={{ paddingLeft: `${depth * 12 + 24}px` }}
         onClick={() => file && openFile(file)}
       >
-        <FileCode size={14} className="text-gray-400" />
-        <span className="text-sm text-gray-300">{node.name}</span>
+        <span className="text-xs font-mono flex-shrink-0 group-hover:text-blue-400 transition-colors">
+          {getFileIcon(node.name)}
+        </span>
+        <span className="text-xs md:text-sm truncate flex-1">{node.name}</span>
       </div>
     );
   };
@@ -458,25 +466,25 @@ function App() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex flex-col">
       {/* Header */}
-      <div className="bg-gray-800/50 backdrop-blur-lg border-b border-gray-700 shadow-xl">
-        <div className="px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-                <Terminal className="text-blue-400" />
-                AI Next.js Full-Stack Generator
+      <div className="glass border-b border-gray-700/50 shadow-xl sticky top-0 z-50">
+        <div className="px-4 md:px-6 py-4">
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <div className="flex-1 min-w-0">
+              <h1 className="text-xl md:text-2xl font-bold text-white flex items-center gap-2 animate-in">
+                <Terminal className="text-blue-400 flex-shrink-0" size={24} />
+                <span className="truncate">AI Next.js Full-Stack Generator</span>
               </h1>
-              <p className="text-gray-400 text-sm">
+              <p className="text-gray-400 text-xs md:text-sm mt-1">
                 Describe your app - Get complete Next.js + Database + Docker setup in minutes
               </p>
             </div>
             {files.length > 0 && (
               <button
                 onClick={downloadAllFiles}
-                className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition"
+                className="btn-success flex items-center gap-2 shadow-lg"
               >
                 <Download size={16} />
-                Download All
+                <span className="hidden sm:inline">Download All</span>
               </button>
             )}
           </div>
@@ -484,24 +492,32 @@ function App() {
 
         {/* Progress Bar */}
         {isGenerating && (
-          <div className="px-6 pb-4">
-            <div className="bg-gray-700 rounded-full h-2 overflow-hidden">
+          <div className="px-4 md:px-6 pb-4 animate-in">
+            <div className="bg-gray-700/50 rounded-full h-2.5 overflow-hidden shadow-inner">
               <div
-                className="bg-gradient-to-r from-blue-500 to-cyan-500 h-full transition-all duration-500"
+                className="bg-gradient-to-r from-blue-500 via-blue-400 to-cyan-500 h-full transition-all duration-500 ease-out shadow-glow-blue"
                 style={{ width: `${progress}%` }}
               />
             </div>
-            <div className="flex justify-between items-center mt-2">
-              <div className="text-sm text-gray-400">
-                {currentPhase && <span className="font-semibold text-blue-400">{currentPhase}</span>}
-                {currentAgent && <span className="ml-2">• {currentAgent}</span>}
+            <div className="flex flex-wrap justify-between items-center mt-3 gap-2">
+              <div className="text-xs md:text-sm text-gray-400 flex items-center gap-2">
+                {currentPhase && (
+                  <span className="badge-blue font-semibold animate-pulse">
+                    {currentPhase}
+                  </span>
+                )}
+                {currentAgent && (
+                  <span className="hidden md:inline">
+                    {currentAgent}
+                  </span>
+                )}
               </div>
               <button
                 onClick={cancelGeneration}
-                className="text-red-400 hover:text-red-300 text-sm flex items-center gap-1"
+                className="text-red-400 hover:text-red-300 text-xs md:text-sm flex items-center gap-1 transition-colors"
               >
                 <X size={14} />
-                Cancel
+                <span>Cancel</span>
               </button>
             </div>
           </div>
@@ -509,60 +525,71 @@ function App() {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
         {/* Sidebar - Input or File Tree */}
-        <div className="w-80 bg-gray-800/80 border-r border-gray-700 flex flex-col">
+        <div className="w-full md:w-80 lg:w-96 glass-dark border-b md:border-b-0 md:border-r border-gray-700/50 flex flex-col">
           {files.length === 0 ? (
             /* Input Section */
-            <div className="p-6 flex flex-col h-full">
-              <h2 className="text-lg font-semibold text-white mb-4">What do you want to build?</h2>
+            <div className="p-4 md:p-6 flex flex-col h-full">
+              <h2 className="text-base md:text-lg font-semibold text-white mb-3 md:mb-4 flex items-center gap-2">
+                <Activity className="text-blue-400" size={20} />
+                What do you want to build?
+              </h2>
           
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
                 placeholder="Example: Build a task management app with user authentication, teams, projects, and real-time notifications..."
-                className="flex-1 px-4 py-3 bg-gray-700 text-white border border-gray-600 rounded-lg focus:border-blue-500 focus:outline-none resize-none mb-4"
+                className="input flex-1 resize-none mb-4 text-sm md:text-base min-h-[120px] md:min-h-[200px]"
             disabled={isGenerating}
           />
 
               {/* Tech Stack Display */}
-              <div className="mb-4 p-4 bg-gray-700/50 border border-gray-600 rounded-lg">
-                <div className="text-sm font-medium text-gray-300 mb-3">Tech Stack (Fixed):</div>
-                <div className="space-y-2 text-sm text-gray-400">
-                  <div className="flex items-center gap-2">
-                    <span><strong>Frontend:</strong> Next.js 14 + TypeScript + Tailwind CSS</span>
+              <div className="card mb-4 animate-in">
+                <div className="text-xs md:text-sm font-semibold text-gray-200 mb-3 flex items-center gap-2">
+                  <CheckCircle className="text-green-400 flex-shrink-0" size={16} />
+                  Tech Stack (Fixed)
+                </div>
+                <div className="space-y-2 text-xs md:text-sm text-gray-400">
+                  <div className="flex items-start gap-2">
+                    <span className="text-blue-400 mt-0.5">•</span>
+                    <span><strong className="text-gray-300">Frontend:</strong> Next.js 14 + TypeScript + Tailwind CSS</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span><strong>Backend:</strong> Next.js API Routes (REST)</span>
+                  <div className="flex items-start gap-2">
+                    <span className="text-green-400 mt-0.5">•</span>
+                    <span><strong className="text-gray-300">Backend:</strong> Next.js API Routes (REST)</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span><strong>Database:</strong> PostgreSQL / MongoDB (auto-selected)</span>
+                  <div className="flex items-start gap-2">
+                    <span className="text-purple-400 mt-0.5">•</span>
+                    <span><strong className="text-gray-300">Database:</strong> PostgreSQL / MongoDB (auto-selected)</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span><strong>Deployment:</strong> Docker + docker-compose</span>
+                  <div className="flex items-start gap-2">
+                    <span className="text-cyan-400 mt-0.5">•</span>
+                    <span><strong className="text-gray-300">Deployment:</strong> Docker + docker-compose</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span><strong>Testing:</strong> Jest + React Testing Library</span>
+                  <div className="flex items-start gap-2">
+                    <span className="text-yellow-400 mt-0.5">•</span>
+                    <span><strong className="text-gray-300">Testing:</strong> Jest + React Testing Library</span>
                   </div>
                 </div>
               </div>
 
               {/* Optional Database Selection */}
               <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-300 mb-2">
+                <label className="block text-xs md:text-sm font-medium text-gray-300 mb-2">
                   Database Preference (Optional)
               </label>
               <select
                   value={selectedDatabase}
                   onChange={(e) => setSelectedDatabase(e.target.value as 'auto' | 'postgresql' | 'mongodb')}
-                  className="w-full px-4 py-2 bg-gray-700 text-white border border-gray-600 rounded-lg focus:border-blue-500 focus:outline-none"
+                  className="input w-full text-sm"
                 disabled={isGenerating}
               >
                   <option value="auto">Auto-select (Recommended)</option>
                   <option value="postgresql">PostgreSQL (Relational)</option>
                   <option value="mongodb">MongoDB (Document)</option>
               </select>
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-gray-500 mt-2">
                   AI will automatically choose the best database for your use case
                 </p>
             </div>
@@ -570,29 +597,33 @@ function App() {
             <button
               onClick={handleGenerate}
               disabled={isGenerating || !description.trim()}
-                className="w-full px-6 py-3 bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-cyan-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg flex items-center justify-center gap-2"
+                className="btn-primary w-full py-3 text-sm md:text-base font-semibold shadow-glow-blue"
             >
                 {isGenerating ? (
                   <>
                     <Loader2 className="animate-spin" size={18} />
-                    Generating Full-Stack App...
+                    <span className="hidden sm:inline">Generating Full-Stack App...</span>
+                    <span className="sm:hidden">Generating...</span>
                   </>
                 ) : (
                   <>
                     <Play size={18} />
-                    Generate Next.js App
+                    <span className="hidden sm:inline">Generate Next.js App</span>
+                    <span className="sm:hidden">Generate</span>
                   </>
                 )}
             </button>
           </div>
           ) : (
             /* File Tree */
-            <div className="flex flex-col h-full">
-              <div className="px-4 py-3 border-b border-gray-700">
-                <div className="flex items-center gap-2 text-gray-400 text-xs font-semibold tracking-wider">
-                  <FolderTree size={16} />
-                  <span>EXPLORER</span>
-                  <span className="ml-auto text-blue-400">{files.length} files</span>
+            <div className="flex flex-col h-full animate-in">
+              <div className="px-3 md:px-4 py-3 border-b border-gray-700/50">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-gray-400 text-xs font-semibold tracking-wider">
+                    <FolderTree size={16} className="text-blue-400" />
+                    <span>EXPLORER</span>
+                  </div>
+                  <span className="badge-blue text-xs">{files.length}</span>
                 </div>
               </div>
               <div className="flex-1 overflow-y-auto">
@@ -603,29 +634,29 @@ function App() {
             </div>
 
         {/* Main Editor Area */}
-        <div className="flex-1 flex flex-col bg-gray-900">
+        <div className="flex-1 flex flex-col bg-editor-bg overflow-hidden">
           {selectedFile ? (
             <>
               {/* File Tabs */}
-              <div className="bg-gray-800 border-b border-gray-700 flex items-center px-2 gap-1 overflow-x-auto">
+              <div className="bg-editor-sidebar border-b border-editor-border flex items-center px-2 gap-1 overflow-x-auto scrollbar-thin">
                 {openFiles.map(file => (
                   <div
                     key={file.filepath}
-                    className={`flex items-center gap-2 px-3 py-2 cursor-pointer group ${
+                    className={`flex items-center gap-2 px-3 py-2 cursor-pointer group transition-all flex-shrink-0 ${
                       selectedFile.filepath === file.filepath
-                        ? 'bg-gray-900 text-white border-t-2 border-blue-500'
-                        : 'text-gray-400 hover:text-white hover:bg-gray-700'
+                        ? 'bg-editor-bg text-white border-t-2 border-blue-500'
+                        : 'text-gray-400 hover:text-white hover:bg-editor-hover'
                     }`}
                     onClick={() => setSelectedFile(file)}
                   >
-                    <span className="text-xs">{getFileIcon(file.filename)}</span>
-                    <span className="text-sm font-medium">{file.filename}</span>
+                    <span className="text-xs font-mono">{getFileIcon(file.filename)}</span>
+                    <span className="text-xs md:text-sm font-medium truncate max-w-[150px]">{file.filename}</span>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         closeFile(file);
                       }}
-                      className="opacity-0 group-hover:opacity-100 hover:text-red-400 transition"
+                      className="opacity-0 group-hover:opacity-100 hover:text-red-400 transition-opacity flex-shrink-0"
                     >
                       <X size={14} />
                     </button>
@@ -634,7 +665,7 @@ function App() {
                   </div>
 
               {/* Monaco Editor */}
-              <div className="flex-1">
+              <div className="flex-1 overflow-hidden">
                 <Editor
                   height="100%"
                   language={getLanguageMode(selectedFile.language)}
@@ -642,73 +673,88 @@ function App() {
                   theme="vs-dark"
                   options={{
                     readOnly: true,
-                    minimap: { enabled: true },
-                    fontSize: 14,
+                    minimap: { enabled: window.innerWidth > 768 },
+                    fontSize: window.innerWidth < 640 ? 12 : 14,
                     lineNumbers: 'on',
                     scrollBeyondLastLine: false,
                     automaticLayout: true,
                     tabSize: 2,
+                    wordWrap: 'on',
+                    folding: true,
+                    renderLineHighlight: 'line',
                   }}
                 />
               </div>
 
               {/* Status Bar */}
-              <div className="bg-blue-600 px-4 py-2 flex gap-6 text-xs text-white">
-                <span>{selectedFile.content.split('\n').length} lines</span>
-                  <span>{(selectedFile.content.length / 1024).toFixed(1)} KB</span>
-                  <span>{selectedFile.language.toUpperCase()}</span>
+              <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-3 md:px-4 py-2 flex gap-4 md:gap-6 text-xs text-white flex-wrap">
+                <span className="flex items-center gap-1">
+                  <span className="hidden sm:inline">Lines:</span>
+                  {selectedFile.content.split('\n').length}
+                </span>
+                  <span className="flex items-center gap-1">
+                    <span className="hidden sm:inline">Size:</span>
+                  {(selectedFile.content.length / 1024).toFixed(1)} KB
+                  </span>
+                  <span className="flex items-center gap-1 font-semibold">
+                  {selectedFile.language.toUpperCase()}
+                  </span>
                 </div>
             </>
           ) : (
-            <div className="flex-1 flex items-center justify-center text-gray-500">
-              <div className="text-center">
+            <div className="flex-1 flex items-center justify-center text-gray-500 p-8">
+              <div className="text-center animate-in">
                 <FileCode size={64} className="mx-auto mb-4 opacity-20" />
-                <p className="text-lg">No file selected</p>
-                <p className="text-sm">Select a file from the explorer to view</p>
+                <p className="text-base md:text-lg font-medium mb-2">No file selected</p>
+                <p className="text-xs md:text-sm text-gray-600">Select a file from the explorer to view its content</p>
               </div>
             </div>
           )}
         </div>
 
         {/* Activity Panel */}
-        <div className="w-96 bg-gray-800/80 border-l border-gray-700 flex flex-col">
-          <div className="px-4 py-3 border-b border-gray-700 flex items-center gap-2">
-            <Activity size={16} className="text-green-400" />
-            <span className="text-sm font-semibold text-white">ACTIVITY LOG</span>
-            <span className="ml-auto text-xs text-gray-500">{activityLogs.length} events</span>
+        <div className="w-full md:w-80 lg:w-96 glass-dark border-t md:border-t-0 md:border-l border-gray-700/50 flex flex-col max-h-96 md:max-h-full">
+          <div className="px-3 md:px-4 py-3 border-b border-gray-700/50 flex items-center justify-between sticky top-0 bg-gray-900/90 backdrop-blur-sm z-10">
+            <div className="flex items-center gap-2">
+              <Activity size={16} className="text-green-400 animate-pulse" />
+              <span className="text-xs md:text-sm font-semibold text-white tracking-wider">ACTIVITY LOG</span>
+            </div>
+            <span className="badge-green text-xs">{activityLogs.length}</span>
           </div>
           
-          <div className="flex-1 overflow-y-auto p-4 space-y-2">
+          <div className="flex-1 overflow-y-auto p-3 md:p-4 space-y-2 scrollbar-thin">
             {activityLogs.length === 0 ? (
-              <div className="text-center text-gray-500 text-sm mt-8">
-                No activity yet. Click "Generate Code" to start.
+              <div className="text-center text-gray-500 text-xs md:text-sm mt-8 p-4 animate-in">
+                <Terminal size={32} className="mx-auto mb-3 opacity-30" />
+                <p>No activity yet</p>
+                <p className="text-xs text-gray-600 mt-1">Click "Generate" to start</p>
               </div>
             ) : (
               activityLogs.map(log => (
                 <div
                   key={log.id}
-                  className={`p-3 rounded-lg text-sm ${
+                  className={`p-2 md:p-3 rounded-lg text-xs md:text-sm transition-all animate-in ${
                     log.type === 'phase'
-                      ? 'bg-blue-500/20 border border-blue-500/30 text-blue-200'
+                      ? 'bg-blue-500/20 border border-blue-500/30 text-blue-200 shadow-glow-blue'
                       : log.type === 'agent'
                       ? 'bg-purple-500/20 border border-purple-500/30 text-purple-200'
                       : log.type === 'file'
                       ? 'bg-green-500/20 border border-green-500/30 text-green-200'
                       : log.type === 'error'
                       ? 'bg-red-500/20 border border-red-500/30 text-red-200'
-                      : 'bg-gray-700 border border-gray-600 text-gray-300'
+                      : 'bg-gray-700/50 border border-gray-600/30 text-gray-300'
                   }`}
                 >
                   <div className="flex items-start gap-2">
-                    {log.type === 'phase' && <CheckCircle size={16} className="mt-0.5 flex-shrink-0" />}
-                    {log.type === 'agent' && <Loader2 size={16} className="mt-0.5 animate-spin flex-shrink-0" />}
-                    {log.type === 'file' && <FileCode size={16} className="mt-0.5 flex-shrink-0" />}
-                    {log.type === 'error' && <AlertCircle size={16} className="mt-0.5 flex-shrink-0" />}
-                    {log.type === 'success' && <CheckCircle size={16} className="mt-0.5 flex-shrink-0" />}
+                    {log.type === 'phase' && <CheckCircle size={14} className="mt-0.5 flex-shrink-0" />}
+                    {log.type === 'agent' && <Loader2 size={14} className="mt-0.5 animate-spin flex-shrink-0" />}
+                    {log.type === 'file' && <FileCode size={14} className="mt-0.5 flex-shrink-0" />}
+                    {log.type === 'error' && <AlertCircle size={14} className="mt-0.5 flex-shrink-0" />}
+                    {log.type === 'success' && <CheckCircle size={14} className="mt-0.5 flex-shrink-0" />}
                     
                     <div className="flex-1 min-w-0">
-                      <div className="font-medium break-words">{log.message}</div>
-                      <div className="text-xs opacity-70 mt-1">
+                      <div className="font-medium break-words leading-relaxed">{log.message}</div>
+                      <div className="text-xs opacity-60 mt-1 font-mono">
                         {log.timestamp.toLocaleTimeString()}
                       </div>
                     </div>
@@ -716,7 +762,7 @@ function App() {
           </div>
               ))
         )}
-            <div ref={activityEndRef} />
+            <div ref={activityEndRef} className="h-4" />
           </div>
         </div>
       </div>
