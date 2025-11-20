@@ -32,10 +32,8 @@ from agents.phase2_design.component_designer_agent import ComponentDesignerAgent
 from agents.phase2_design.ui_designer_agent import UIDesignerAgent
 from agents.phase2_design.database_designer_agent import DatabaseDesignerAgent
 
-# Import original Phase 3 agents
-from agents.coder_agent import CoderAgent
+# Import Phase 3 implementation agents
 from agents.phase3_implementation.nextjs_coder_agent import NextJSCoderAgent
-from agents.tester_agent import TesterAgent
 from agents.phase3_implementation.docker_generator_agent import DockerGeneratorAgent
 
 # Import Phase 4 agents
@@ -118,7 +116,7 @@ class AdvancedOrchestrator:
 
         # Phase 3: Implementation (Next.js focused)
         self.coder = NextJSCoderAgent(self.mcp, self.openai)  # Next.js-specific coder
-        self.tester = TesterAgent(self.mcp, self.openai)
+        # Note: Testing is now integrated into NextJSCoderAgent
         self.docker_generator = DockerGeneratorAgent(self.mcp, self.openai)
 
         # Phase 4: Quality Assurance
@@ -137,7 +135,7 @@ class AdvancedOrchestrator:
         return [
             self.requirements_analyst, self.researcher,
             self.architect, self.database_designer, self.module_designer, self.component_designer, self.ui_designer,
-            self.coder, self.tester, self.docker_generator,
+            self.coder, self.docker_generator,
             self.debugger, self.security_auditor, self.reviewer,
             self.executor, self.monitor
         ]
@@ -293,17 +291,9 @@ class AdvancedOrchestrator:
             if code_result.get("activity"):
                 result.agent_activities.append(code_result["activity"])
 
-            # Step 3.2: Test Generation
-            test_result = await self.tester.process_task({
-                "code_files": result.code_files,
-                "language": request_data.get("language"),
-                "description": request_data.get("description")
-            })
-            if "test_files" not in test_result:
-                raise ValueError("Tester did not return 'test_files' key")
-            result.test_files = test_result["test_files"]
-            if test_result.get("activity"):
-                result.agent_activities.append(test_result["activity"])
+            # Step 3.2: Test Generation (integrated into NextJSCoderAgent)
+            # Note: NextJSCoderAgent now includes test files in code_files
+            result.test_files = []  # Tests are included in code_files
 
             # Step 3.3: Docker Configuration Generation (Next.js specific)
             docker_result = await self.docker_generator.process_task({
@@ -717,15 +707,9 @@ class AdvancedOrchestrator:
             if code_result.get("activity"):
                 result.agent_activities.append(code_result["activity"])
 
-            # Step 3.2: Test Generation
-            test_result = await self.tester.process_task({
-                "code_files": result.code_files,
-                "language": effective_language,
-                "description": request_data.get("description")
-            })
-            result.test_files = test_result["test_files"]
-            if test_result.get("activity"):
-                result.agent_activities.append(test_result["activity"])
+            # Step 3.2: Test Generation (integrated into NextJSCoderAgent)
+            # Note: NextJSCoderAgent now includes test files in code_files
+            result.test_files = []  # Tests are included in code_files
 
             # ==== PHASE 4: QUALITY ASSURANCE ====
             logger.info("phase_4_qa", request_id=request_id)
@@ -942,13 +926,11 @@ class AdvancedOrchestrator:
                 }
             yield {'type': 'agent_completed', 'agent': 'Code Generator', 'data': {'file_count': len(code_result.get("code_files", []))}}
             
-            # Test Generation
-            yield {'type': 'agent_started', 'agent': 'Test Generator', 'activity': 'Creating test files...'}
-            test_result = await self.tester.process_task({
-                **request_data,
-                "requirements": requirements,
-                "code_files": code_result.get("code_files", [])
-            })
+            # Test Generation (integrated into NextJSCoderAgent)
+            # Note: Tests are now included in code_files from NextJSCoderAgent
+            
+            # Skip separate test generation - already included
+            test_result = {"test_files": []}
             
             for file in test_result.get("test_files", []):
                 yield {
