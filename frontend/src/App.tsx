@@ -1,3 +1,10 @@
+// Main App - Chat-based Code Generation Interface
+import ChatApp from './ChatApp';
+
+export default ChatApp;
+
+/* 
+// OLD ONE-SHOT GENERATION INTERFACE (commented out - use ChatApp instead)
 import React, { useState, useRef, useEffect } from 'react';
 import Editor from '@monaco-editor/react';
 import { 
@@ -770,4 +777,5 @@ function App() {
   );
 }
 
-export default App;
+// export default App;
+*/
