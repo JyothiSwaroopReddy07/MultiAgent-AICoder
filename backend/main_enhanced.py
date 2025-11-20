@@ -167,6 +167,10 @@ app.include_router(enhanced_router, prefix="/api/v2", tags=["Code Generation"])
 app.include_router(streaming_router, tags=["Streaming"])
 app.include_router(health_router, tags=["Health & Monitoring"])
 
+# Chat-based interactive API (NEW)
+from api.chat_routes import router as chat_router
+app.include_router(chat_router, tags=["Chat Interface"])
+
 
 # Root endpoint
 @app.get("/")
