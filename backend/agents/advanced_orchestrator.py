@@ -30,10 +30,13 @@ from agents.phase2_design.architect_agent import ArchitectAgent
 from agents.phase2_design.module_designer_agent import ModuleDesignerAgent
 from agents.phase2_design.component_designer_agent import ComponentDesignerAgent
 from agents.phase2_design.ui_designer_agent import UIDesignerAgent
+from agents.phase2_design.database_designer_agent import DatabaseDesignerAgent
 
 # Import original Phase 3 agents
 from agents.coder_agent import CoderAgent
+from agents.phase3_implementation.nextjs_coder_agent import NextJSCoderAgent
 from agents.tester_agent import TesterAgent
+from agents.phase3_implementation.docker_generator_agent import DockerGeneratorAgent
 
 # Import Phase 4 agents
 from agents.phase4_qa.debugger_agent import DebuggerAgent
@@ -108,13 +111,15 @@ class AdvancedOrchestrator:
 
         # Phase 2: Design & Planning
         self.architect = ArchitectAgent(self.mcp, self.openai)
+        self.database_designer = DatabaseDesignerAgent(self.mcp, self.openai)
         self.module_designer = ModuleDesignerAgent(self.mcp, self.openai)
         self.component_designer = ComponentDesignerAgent(self.mcp, self.openai)
         self.ui_designer = UIDesignerAgent(self.mcp, self.openai)
 
-        # Phase 3: Implementation
-        self.coder = CoderAgent(self.mcp, self.openai)
+        # Phase 3: Implementation (Next.js focused)
+        self.coder = NextJSCoderAgent(self.mcp, self.openai)  # Next.js-specific coder
         self.tester = TesterAgent(self.mcp, self.openai)
+        self.docker_generator = DockerGeneratorAgent(self.mcp, self.openai)
 
         # Phase 4: Quality Assurance
         self.debugger = DebuggerAgent(self.mcp, self.openai)
@@ -131,8 +136,8 @@ class AdvancedOrchestrator:
         """Get list of all agents"""
         return [
             self.requirements_analyst, self.researcher,
-            self.architect, self.module_designer, self.component_designer, self.ui_designer,
-            self.coder, self.tester,
+            self.architect, self.database_designer, self.module_designer, self.component_designer, self.ui_designer,
+            self.coder, self.tester, self.docker_generator,
             self.debugger, self.security_auditor, self.reviewer,
             self.executor, self.monitor
         ]
@@ -206,6 +211,20 @@ class AdvancedOrchestrator:
             if hld_result.get("activity"):
                 result.agent_activities.append(hld_result["activity"])
 
+            # Step 2.1.5: Database Schema Design (Next.js specific)
+            db_result = await self.database_designer.process_task({
+                "requirements": result.requirements.model_dump(),
+                "database_preference": request_data.get("database", "auto"),
+                "description": request_data.get("description", "")
+            })
+            result.database_schema = db_result.get("database_schema", {})
+            if db_result.get("activity"):
+                result.agent_activities.append(db_result["activity"])
+            
+            logger.info("database_schema_designed", 
+                       database_type=result.database_schema.get("database_type"),
+                       entity_count=len(result.database_schema.get("entities", [])))
+
             # Step 2.2: Module Design
             module_result = await self.module_designer.process_task({
                 **request_data,
@@ -261,7 +280,9 @@ class AdvancedOrchestrator:
                     "estimated_complexity": "medium"
                 },
                 "description": request_data.get("description"),
-                "language": request_data.get("language"),
+                "language": request_data.get("language", "nextjs"),
+                "database_schema": result.database_schema,  # Pass database schema to coder
+                "requirements": result.requirements.model_dump(),
                 "hld": result.hld.model_dump(),
                 "modules": [m.model_dump() for m in result.modules],
                 "lld": [l.model_dump() for l in result.lld]
@@ -283,6 +304,20 @@ class AdvancedOrchestrator:
             result.test_files = test_result["test_files"]
             if test_result.get("activity"):
                 result.agent_activities.append(test_result["activity"])
+
+            # Step 3.3: Docker Configuration Generation (Next.js specific)
+            docker_result = await self.docker_generator.process_task({
+                "database_schema": result.database_schema,
+                "code_files": result.code_files,
+                "description": request_data.get("description", "")
+            })
+            docker_files = docker_result.get("docker_files", [])
+            # Add Docker files to code files
+            result.code_files.extend(docker_files)
+            if docker_result.get("activity"):
+                result.agent_activities.append(docker_result["activity"])
+            
+            logger.info("docker_configuration_generated", docker_file_count=len(docker_files))
 
             # ==== PHASE 4: QUALITY ASSURANCE ====
             logger.info("phase_4_qa", request_id=request_id)
@@ -852,6 +887,19 @@ class AdvancedOrchestrator:
             arch_result = await self.architect.process_task({**request_data, "requirements": requirements, "research": research_result["research_findings"]})
             yield {'type': 'agent_completed', 'agent': 'Architect'}
             
+            # Database Schema Design
+            yield {'type': 'agent_started', 'agent': 'Database Designer', 'activity': 'Designing database schema...'}
+            db_result = await self.database_designer.process_task({
+                "requirements": requirements,
+                "database_preference": request_data.get("database", "auto"),
+                "description": request_data.get("description", "")
+            })
+            database_schema = db_result.get("database_schema", {})
+            yield {'type': 'agent_completed', 'agent': 'Database Designer', 'data': {
+                'database_type': database_schema.get('database_type'),
+                'entity_count': len(database_schema.get('entities', []))
+            }}
+            
             # Module Design
             yield {'type': 'agent_started', 'agent': 'Module Designer', 'activity': 'Planning module structure...'}
             module_result = await self.module_designer.process_task({**request_data, "requirements": requirements, "architecture": arch_result["architecture"]})
@@ -871,12 +919,13 @@ class AdvancedOrchestrator:
             yield {'type': 'phase_started', 'phase': 'Phase 3: Implementation'}
             
             # Code Generation
-            yield {'type': 'agent_started', 'agent': 'Code Generator', 'activity': 'Generating code files...'}
+            yield {'type': 'agent_started', 'agent': 'Code Generator', 'activity': 'Generating Next.js code files...'}
             code_result = await self.coder.process_task({
                 **request_data,
                 "requirements": requirements,
-                "architecture": arch_result["architecture"],
-                "component_design": comp_result["component_design"],
+                "database_schema": database_schema,  # Pass database schema
+                "architecture": arch_result.get("architecture", {}),
+                "component_design": comp_result.get("component_design", {}),
                 "ui_design": ui_result.get("ui_design")
             })
             
@@ -912,6 +961,27 @@ class AdvancedOrchestrator:
                     }
                 }
             yield {'type': 'agent_completed', 'agent': 'Test Generator', 'data': {'test_count': len(test_result.get("test_files", []))}}
+            
+            # Docker Configuration
+            yield {'type': 'agent_started', 'agent': 'Docker Generator', 'activity': 'Generating Docker configuration...'}
+            docker_result = await self.docker_generator.process_task({
+                "database_schema": database_schema,
+                "code_files": code_result.get("code_files", []),
+                "description": request_data.get("description", "")
+            })
+            
+            # Stream Docker files
+            for file in docker_result.get("docker_files", []):
+                yield {
+                    'type': 'file_generated',
+                    'file': {
+                        'filename': file.get('filename'),
+                        'filepath': file.get('filepath'),
+                        'language': file.get('language'),
+                        'content': file.get('content')
+                    }
+                }
+            yield {'type': 'agent_completed', 'agent': 'Docker Generator', 'data': {'docker_file_count': len(docker_result.get("docker_files", []))}}
             
             # Phase 4: QA
             yield {'type': 'phase_started', 'phase': 'Phase 4: Quality Assurance'}
