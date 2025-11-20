@@ -34,8 +34,8 @@ interface ActivityLog {
 
 function App() {
   const [description, setDescription] = useState('');
-  const [language, setLanguage] = useState('python');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [selectedDatabase, setSelectedDatabase] = useState<'auto' | 'postgresql' | 'mongodb'>('auto');
   const [files, setFiles] = useState<CodeFile[]>([]);
   const [openFiles, setOpenFiles] = useState<CodeFile[]>([]);
   const [selectedFile, setSelectedFile] = useState<CodeFile | null>(null);
@@ -96,8 +96,9 @@ function App() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          description,
-          language,
+        description,
+          language: 'nextjs',
+          database: selectedDatabase,
           requirements: []
         })
       });
@@ -332,35 +333,63 @@ function App() {
 
   const getFileIcon = (name: string) => {
     const parts = name.split('.');
-    if (parts.length === 1) return '📄'; // No extension (README, Makefile, etc.)
+    
+    // Special file names
+    if (name === 'package.json') return '📦';
+    if (name === 'tsconfig.json') return '⚙️';
+    if (name === 'next.config.js' || name === 'next.config.ts') return '⚡';
+    if (name === 'tailwind.config.js' || name === 'tailwind.config.ts') return '🎨';
+    if (name === 'Dockerfile') return '🐳';
+    if (name === 'docker-compose.yml') return '🐋';
+    if (name === '.env' || name === '.env.local' || name === '.env.example') return '🔐';
+    if (name === 'README.md') return '📖';
+    if (parts.length === 1) return '📄';
     
     const ext = parts.pop()?.toLowerCase();
     const icons: { [key: string]: string } = {
-      py: '🐍', js: '📜', ts: '📘', tsx: '⚛️', jsx: '⚛️',
-      java: '☕', go: '🔵', rs: '🦀', html: '🌐', css: '🎨',
-      json: '📋', md: '📝', yml: '⚙️', yaml: '⚙️', txt: '📄',
-      sql: '🗄️', sh: '⚡', env: '🔐'
+      tsx: '⚛️',
+      jsx: '⚛️',
+      ts: '📘',
+      js: '📜',
+      html: '🌐',
+      css: '🎨',
+      scss: '🎨',
+      json: '📋',
+      md: '📝',
+      yml: '⚙️',
+      yaml: '⚙️',
+      txt: '📄',
+      sql: '🗄️',
+      sh: '⚡',
+      env: '🔐',
+      prisma: '🔷',
+      gitignore: '🚫'
     };
     return icons[ext || ''] || '📄';
   };
 
   const getLanguageMode = (language: string): string => {
     const langMap: { [key: string]: string } = {
-      python: 'python',
-      javascript: 'javascript',
+      nextjs: 'typescript',
       typescript: 'typescript',
-      java: 'java',
-      go: 'go',
-      rust: 'rust',
+      javascript: 'javascript',
+      tsx: 'typescript',
+      jsx: 'javascript',
       html: 'html',
       css: 'css',
+      scss: 'scss',
       json: 'json',
       yaml: 'yaml',
+      yml: 'yaml',
       markdown: 'markdown',
+      md: 'markdown',
       sql: 'sql',
-      shell: 'shell'
+      dockerfile: 'dockerfile',
+      shell: 'shell',
+      sh: 'shell',
+      env: 'shell'
     };
-    return langMap[language.toLowerCase()] || 'plaintext';
+    return langMap[language.toLowerCase()] || 'typescript'; // Default to TypeScript for Next.js
   };
 
   const downloadAllFiles = () => {
@@ -435,9 +464,11 @@ function App() {
             <div>
               <h1 className="text-2xl font-bold text-white flex items-center gap-2">
                 <Terminal className="text-blue-400" />
-                AI Coder - No Code Required
+                AI Next.js Full-Stack Generator
               </h1>
-              <p className="text-gray-400 text-sm">Describe what you want - Watch AI build it in real-time</p>
+              <p className="text-gray-400 text-sm">
+                Describe your app - Get complete Next.js + Database + Docker setup in minutes
+              </p>
             </div>
             {files.length > 0 && (
               <button
@@ -485,52 +516,80 @@ function App() {
             /* Input Section */
             <div className="p-6 flex flex-col h-full">
               <h2 className="text-lg font-semibold text-white mb-4">What do you want to build?</h2>
-              
-              <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Example: Build a REST API for a todo app with user authentication, JWT tokens, and SQLite database..."
+          
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+                placeholder="Example: Build a task management app with user authentication, teams, projects, and real-time notifications..."
                 className="flex-1 px-4 py-3 bg-gray-700 text-white border border-gray-600 rounded-lg focus:border-blue-500 focus:outline-none resize-none mb-4"
-                disabled={isGenerating}
-              />
+            disabled={isGenerating}
+          />
 
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Programming Language
-                </label>
-                <select
-                  value={language}
-                  onChange={(e) => setLanguage(e.target.value)}
-                  className="w-full px-4 py-2 bg-gray-700 text-white border border-gray-600 rounded-lg focus:border-blue-500 focus:outline-none"
-                  disabled={isGenerating}
-                >
-                  <option value="python">Python</option>
-                  <option value="javascript">JavaScript</option>
-                  <option value="typescript">TypeScript</option>
-                  <option value="java">Java</option>
-                  <option value="go">Go</option>
-                  <option value="rust">Rust</option>
-                </select>
+              {/* Tech Stack Display */}
+              <div className="mb-4 p-4 bg-gray-700/50 border border-gray-600 rounded-lg">
+                <div className="text-sm font-medium text-gray-300 mb-3">Tech Stack (Fixed):</div>
+                <div className="space-y-2 text-sm text-gray-400">
+                  <div className="flex items-center gap-2">
+                    <span className="text-blue-400">⚛️</span>
+                    <span><strong>Frontend:</strong> Next.js 14 + TypeScript + Tailwind CSS</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-green-400">🔌</span>
+                    <span><strong>Backend:</strong> Next.js API Routes (REST)</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-purple-400">🗄️</span>
+                    <span><strong>Database:</strong> PostgreSQL / MongoDB (auto-selected)</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-cyan-400">🐳</span>
+                    <span><strong>Deployment:</strong> Docker + docker-compose</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-yellow-400">🧪</span>
+                    <span><strong>Testing:</strong> Jest + React Testing Library</span>
+                  </div>
+                </div>
               </div>
 
-              <button
-                onClick={handleGenerate}
-                disabled={isGenerating || !description.trim()}
-                className="w-full px-6 py-3 bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-cyan-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg flex items-center justify-center gap-2"
+              {/* Optional Database Selection */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Database Preference (Optional)
+              </label>
+              <select
+                  value={selectedDatabase}
+                  onChange={(e) => setSelectedDatabase(e.target.value as 'auto' | 'postgresql' | 'mongodb')}
+                  className="w-full px-4 py-2 bg-gray-700 text-white border border-gray-600 rounded-lg focus:border-blue-500 focus:outline-none"
+                disabled={isGenerating}
               >
+                  <option value="auto">Auto-select (Recommended)</option>
+                  <option value="postgresql">PostgreSQL (Relational)</option>
+                  <option value="mongodb">MongoDB (Document)</option>
+              </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  AI will automatically choose the best database for your use case
+                </p>
+            </div>
+
+            <button
+              onClick={handleGenerate}
+              disabled={isGenerating || !description.trim()}
+                className="w-full px-6 py-3 bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-cyan-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg flex items-center justify-center gap-2"
+            >
                 {isGenerating ? (
                   <>
                     <Loader2 className="animate-spin" size={18} />
-                    Generating...
+                    Generating Full-Stack App...
                   </>
                 ) : (
                   <>
                     <Play size={18} />
-                    Generate Code
+                    Generate Next.js App
                   </>
                 )}
-              </button>
-            </div>
+            </button>
+          </div>
           ) : (
             /* File Tree */
             <div className="flex flex-col h-full">
@@ -546,7 +605,7 @@ function App() {
               </div>
             </div>
           )}
-        </div>
+            </div>
 
         {/* Main Editor Area */}
         <div className="flex-1 flex flex-col bg-gray-900">
@@ -575,9 +634,9 @@ function App() {
                     >
                       <X size={14} />
                     </button>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
 
               {/* Monaco Editor */}
               <div className="flex-1">
@@ -601,9 +660,9 @@ function App() {
               {/* Status Bar */}
               <div className="bg-blue-600 px-4 py-2 flex gap-6 text-xs text-white">
                 <span>📝 {selectedFile.content.split('\n').length} lines</span>
-                <span>💾 {(selectedFile.content.length / 1024).toFixed(1)} KB</span>
-                <span>🔤 {selectedFile.language.toUpperCase()}</span>
-              </div>
+                  <span>💾 {(selectedFile.content.length / 1024).toFixed(1)} KB</span>
+                  <span>🔤 {selectedFile.language.toUpperCase()}</span>
+                </div>
             </>
           ) : (
             <div className="flex-1 flex items-center justify-center text-gray-500">
@@ -659,9 +718,9 @@ function App() {
                       </div>
                     </div>
                   </div>
-                </div>
+          </div>
               ))
-            )}
+        )}
             <div ref={activityEndRef} />
           </div>
         </div>
