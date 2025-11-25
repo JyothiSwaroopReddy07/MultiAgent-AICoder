@@ -172,7 +172,8 @@ Think step-by-step. Show your research process."""
             )
 
             return {
-                "research": [f.model_dump() for f in findings_list],
+                "research_findings": [f.model_dump() for f in findings_list],
+                "research": [f.model_dump() for f in findings_list],  # Keep both for compatibility
                 "activity": self.current_activity.model_dump() if self.current_activity else None
             }
 

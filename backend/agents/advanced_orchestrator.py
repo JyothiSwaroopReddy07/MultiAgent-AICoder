@@ -855,12 +855,12 @@ class AdvancedOrchestrator:
             
             # Research
             yield {'type': 'agent_started', 'agent': 'Research Agent', 'activity': 'Researching best practices...'}
-            research_result = await self.research_agent.process_task({"requirements": requirements})
+            research_result = await self.researcher.process_task({"requirements": requirements})
             yield {'type': 'agent_completed', 'agent': 'Research Agent'}
             
             # Tech Stack
             yield {'type': 'agent_started', 'agent': 'Tech Stack Decision', 'activity': 'Selecting technologies...'}
-            tech_result = await self.tech_stack_agent.process_task({**request_data, "requirements": requirements, "research": research_result["research_findings"]})
+            tech_result = await self.tech_stack_decision_agent.process_task({**request_data, "requirements": requirements, "research": research_result["research_findings"]})
             yield {'type': 'agent_completed', 'agent': 'Tech Stack Decision', 'data': {'tech_stack': tech_result.get('tech_stack', {})}}
             
             # Phase 2: Design

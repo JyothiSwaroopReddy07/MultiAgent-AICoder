@@ -1,8 +1,8 @@
 """
 Enhanced data models for the advanced multi-agent system
 """
-from typing import List, Dict, Optional, Any, TYPE_CHECKING
-from pydantic import BaseModel, Field
+from typing import List, Dict, Optional, Any, TYPE_CHECKING, Literal
+from pydantic import BaseModel, Field, field_validator
 from enum import Enum
 from datetime import datetime, timezone
 
@@ -92,12 +92,42 @@ class LowLevelDesign(BaseModel):
 
 class DatabaseDesign(BaseModel):
     """Database schema design"""
-    database_type: str = Field(..., description="Database type (SQL/NoSQL)")
+    database_type: Literal["postgresql", "mongodb", "mysql", "sqlite", "other"] = Field(..., description="Database type")
     tables: List[Dict[str, Any]] = Field(..., description="Table/collection definitions")
     relationships: List[str] = Field(default=[], description="Table relationships")
     indexes: List[str] = Field(default=[], description="Index definitions")
     constraints: List[str] = Field(default=[], description="Data constraints")
     migrations: List[str] = Field(default=[], description="Migration strategy")
+    
+    @field_validator('database_type', mode='before')
+    @classmethod
+    def normalize_database_type(cls, v):
+        """Normalize database_type to valid values"""
+        if not v or not isinstance(v, str):
+            return "other"
+        
+        v_lower = str(v).lower().strip()
+        
+        # Handle empty strings, null, none
+        if not v_lower or v_lower in ["null", "none", "", "undefined"]:
+            return "other"
+        
+        # Map variations to valid values
+        if "postgres" in v_lower or "psql" in v_lower:
+            return "postgresql"
+        elif "mongo" in v_lower:
+            return "mongodb"
+        elif "mysql" in v_lower or v_lower == "mariadb":
+            return "mysql"
+        elif "sqlite" in v_lower:
+            return "sqlite"
+        elif v_lower in ["postgresql", "mongodb", "mysql", "sqlite", "other"]:
+            return v_lower
+        elif "sql" in v_lower and "no" not in v_lower:
+            # Generic SQL database
+            return "other"
+        else:
+            return "other"
 
 
 class SecurityAudit(BaseModel):
@@ -105,7 +135,7 @@ class SecurityAudit(BaseModel):
     vulnerabilities: List[Dict[str, str]] = Field(default=[], description="Vulnerabilities found")
     security_score: float = Field(..., ge=0, le=10, description="Security score")
     recommendations: List[str] = Field(default=[], description="Security recommendations")
-    compliance_checks: Dict[str, bool] = Field(default=[], description="Compliance status")
+    compliance_checks: Dict[str, bool] = Field(default_factory=dict, description="Compliance status")
 
 
 class PerformanceAnalysis(BaseModel):

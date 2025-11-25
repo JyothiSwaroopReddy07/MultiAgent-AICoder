@@ -71,8 +71,7 @@ async def send_message(request: ChatMessage):
         async def event_generator():
             """Generate SSE events"""
             try:
-                # Send started event
-                yield f"data: {json.dumps({'type': 'started', 'conversation_id': request.conversation_id or 'new'})}\n\n"
+                actual_conversation_id = None
                 
                 # Process message and stream events
                 async for event in orchestrator.process_message(
@@ -80,6 +79,10 @@ async def send_message(request: ChatMessage):
                     user_message=request.message,
                     action=request.action
                 ):
+                    # Capture conversation_id from first event
+                    if actual_conversation_id is None and hasattr(event, 'data') and isinstance(event.data, dict):
+                        actual_conversation_id = event.data.get('conversation_id')
+                    
                     event_dict = {
                         "type": event.type,
                         "data": event.data,
@@ -88,8 +91,8 @@ async def send_message(request: ChatMessage):
                     yield f"data: {json.dumps(event_dict)}\n\n"
                     await asyncio.sleep(0.01)  # Small delay for client
                 
-                # Send completed event
-                yield f"data: {json.dumps({'type': 'completed'})}\n\n"
+                # Send completed event with conversation_id
+                yield f"data: {json.dumps({'type': 'completed', 'conversation_id': actual_conversation_id})}\n\n"
                 
             except Exception as e:
                 logger.error("chat_stream_error", error=str(e))

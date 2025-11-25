@@ -1,8 +1,10 @@
 """
 Conversation Orchestrator - Manages chat-based code generation workflow
 Handles multi-turn conversations with state management
+
+Uses LLM-based routing via RouterAgent for intelligent agent-to-agent control transfer.
 """
-from typing import Dict, Any, AsyncGenerator, Optional
+from typing import Dict, Any, AsyncGenerator, Optional, List
 import uuid
 import json
 from datetime import datetime, timezone
@@ -21,6 +23,7 @@ from models.conversation_schemas import (
 from agents.conversation.feature_planner_agent import FeaturePlannerAgent
 from agents.conversation.code_modifier_agent import CodeModifierAgent
 from agents.advanced_orchestrator import AdvancedOrchestrator
+from agents.routing import RouterAgent, RoutingAction
 
 logger = structlog.get_logger()
 
@@ -44,11 +47,17 @@ class ConversationOrchestrator:
         from mcp.server import MCPServer
         self.mcp = MCPServer()
         
+        # Initialize LLM-based router for intelligent agent control transfer
+        # RouterAgent needs the raw AsyncOpenAI client, not the wrapper
+        self.router = RouterAgent(openai_client.client)
+        
         self.feature_planner = FeaturePlannerAgent(self.mcp, openai_client)
         self.code_modifier = CodeModifierAgent(self.mcp, openai_client)
-        self.code_generator = AdvancedOrchestrator(openai_client)
+        # Use simplified orchestrator for faster code generation
+        from agents.simple_orchestrator import SimpleOrchestrator
+        self.code_generator = SimpleOrchestrator(openai_client)
         
-        logger.info("conversation_orchestrator_initialized")
+        logger.info("conversation_orchestrator_initialized", routing="llm_based")
     
     async def process_message(
         self,
@@ -87,41 +96,74 @@ class ConversationOrchestrator:
         conversation.messages.append(user_msg)
         conversation.updated_at = datetime.now(timezone.utc)
         
-        # Determine action based on phase and content
-        if action is None:
-            action = self._infer_action(conversation, user_message)
-        
-        logger.info(
-            "processing_message",
-            conversation_id=conversation_id,
-            phase=conversation.phase,
-            action=action
-        )
-        
-        # Route to appropriate handler
+        # Use LLM-based routing to determine next action
+        # This replaces keyword matching with intelligent intent understanding
         try:
-            if action == "plan" or conversation.phase == ConversationPhase.INITIAL:
+            # Build context for router
+            routing_context = {
+                "proposed_features": conversation.proposed_features,
+                "generated_code": conversation.generated_code,
+                "last_action": conversation.metadata.get("last_action") if conversation.metadata else None
+            }
+            
+            # Use Router Agent to make intelligent routing decision
+            routing_decision = await self.router.route_message(
+                user_message=user_message,
+                current_phase=conversation.phase,
+                conversation_history=conversation.messages,
+                context=routing_context
+            )
+            
+            logger.info(
+                "llm_routing_decision",
+                conversation_id=conversation_id,
+                phase=conversation.phase,
+                action=routing_decision.action,
+                confidence=routing_decision.confidence,
+                reasoning=routing_decision.reasoning
+            )
+            
+            # Store routing decision in metadata for debugging
+            if not conversation.metadata:
+                conversation.metadata = {}
+            conversation.metadata["last_routing_decision"] = {
+                "action": routing_decision.action,
+                "confidence": routing_decision.confidence,
+                "reasoning": routing_decision.reasoning
+            }
+            
+            # Route to appropriate handler based on LLM decision
+            if routing_decision.action == RoutingAction.PLAN_FEATURES:
                 async for event in self._handle_feature_planning(conversation, user_message):
                     yield event
             
-            elif action == "refine" or conversation.phase == ConversationPhase.FEATURE_REFINEMENT:
+            elif routing_decision.action == RoutingAction.REFINE_FEATURES:
                 async for event in self._handle_feature_refinement(conversation, user_message):
                     yield event
             
-            elif action == "approve" or "approve" in user_message.lower() or "looks good" in user_message.lower():
+            elif routing_decision.action == RoutingAction.APPROVE_FEATURES:
                 async for event in self._handle_feature_approval(conversation):
                     yield event
             
-            elif action == "implement" or conversation.phase == ConversationPhase.FEATURES_APPROVED:
+            elif routing_decision.action == RoutingAction.IMPLEMENT_CODE:
                 async for event in self._handle_implementation(conversation):
                     yield event
             
-            elif action == "modify" or conversation.phase in [ConversationPhase.CODE_GENERATED, ConversationPhase.MODIFICATION]:
+            elif routing_decision.action == RoutingAction.MODIFY_CODE:
                 async for event in self._handle_code_modification(conversation, user_message):
                     yield event
             
+            elif routing_decision.action == RoutingAction.CLARIFY:
+                async for event in self._handle_clarification(conversation, routing_decision):
+                    yield event
+            
+            elif routing_decision.action == RoutingAction.CHAT:
+                async for event in self._handle_general_conversation(conversation, user_message):
+                    yield event
+            
             else:
-                # General conversation
+                # Fallback (should never happen)
+                logger.warning("unknown_routing_action", action=routing_decision.action)
                 async for event in self._handle_general_conversation(conversation, user_message):
                     yield event
         
@@ -142,6 +184,7 @@ class ConversationOrchestrator:
         yield StreamEvent(
             type="phase_change",
             data={
+                "conversation_id": conversation.conversation_id,
                 "phase": ConversationPhase.FEATURE_PLANNING,
                 "message": "Analyzing your requirements and planning features..."
             }
@@ -166,6 +209,7 @@ class ConversationOrchestrator:
             Feature(**feat) for feat in feature_plan_data.get("features", [])
         ]
         
+        # Pass values directly to FeaturePlan - field validators will handle normalization
         feature_plan = FeaturePlan(
             features=features,
             tech_stack=feature_plan_data.get("tech_stack", {}),
@@ -181,6 +225,7 @@ class ConversationOrchestrator:
         yield StreamEvent(
             type="features_proposed",
             data={
+                "conversation_id": conversation.conversation_id,
                 "features": [feat.dict() for feat in features],
                 "tech_stack": feature_plan.tech_stack,
                 "reasoning": feature_plan_data.get("reasoning", "")
@@ -218,8 +263,15 @@ class ConversationOrchestrator:
         
         yield StreamEvent(
             type="message_start",
-            data={"message": "Refining features based on your feedback..."}
+            data={
+                "conversation_id": conversation.conversation_id,
+                "message": "Refining features based on your feedback..."
+            }
         )
+        
+        # Get previous features for comparison
+        previous_features = conversation.proposed_features.features if conversation.proposed_features else []
+        previous_feature_count = len(previous_features)
         
         # Call feature planner with refinement
         result = await self.feature_planner.process_task({
@@ -235,12 +287,42 @@ class ConversationOrchestrator:
         feature_plan_data = result.get("feature_plan", {})
         
         # Update feature plan
-        features = [
+        new_features = [
             Feature(**feat) for feat in feature_plan_data.get("features", [])
         ]
         
+        # Safety check: If user is adding features, ensure we didn't lose existing ones
+        feedback_lower = user_feedback.lower()
+        is_adding = any(word in feedback_lower for word in [
+            'add', 'also', 'more', 'additional', 'another', 'include', 
+            'plus', 'and also', 'want also', 'need also'
+        ])
+        is_removing = any(word in feedback_lower for word in [
+            'remove', 'delete', 'don\'t want', 'skip', 'exclude', 'without'
+        ])
+        
+        if is_adding and not is_removing:
+            # User wants to ADD features
+            if len(new_features) < previous_feature_count:
+                # Agent accidentally removed features! Merge them back
+                logger.warning(
+                    "feature_count_decreased_on_add",
+                    previous=previous_feature_count,
+                    new=len(new_features),
+                    feedback=user_feedback
+                )
+                
+                # Keep all previous features that aren't in new features
+                new_feature_titles = {f.title.lower() for f in new_features}
+                for prev_feat in previous_features:
+                    if prev_feat.title.lower() not in new_feature_titles:
+                        # This feature was lost, add it back
+                        new_features.append(prev_feat)
+                        logger.info("restored_missing_feature", title=prev_feat.title)
+        
+        # Pass values directly to FeaturePlan - field validators will handle normalization
         conversation.proposed_features = FeaturePlan(
-            features=features,
+            features=new_features,
             tech_stack=feature_plan_data.get("tech_stack", {}),
             database_type=feature_plan_data.get("database_type", "auto"),
             estimated_complexity=feature_plan_data.get("estimated_complexity", "medium"),
@@ -249,10 +331,21 @@ class ConversationOrchestrator:
         
         yield StreamEvent(
             type="features_proposed",
-            data={"features": [feat.dict() for feat in features]}
+            data={
+                "conversation_id": conversation.conversation_id,
+                "features": [feat.dict() for feat in new_features]
+            }
         )
         
-        response_message = f"I've updated the feature plan:\n\n{self._format_feature_plan_message(feature_plan_data)}"
+        # Generate a contextual message based on what changed
+        change_summary = self._generate_change_summary(
+            previous_features, 
+            new_features, 
+            is_adding, 
+            is_removing
+        )
+        
+        response_message = f"{change_summary}\n\n{self._format_feature_plan_message(feature_plan_data)}"
         
         assistant_msg = ConversationMessage(
             id=str(uuid.uuid4()),
@@ -264,7 +357,10 @@ class ConversationOrchestrator:
         
         yield StreamEvent(
             type="message_end",
-            data={"message": response_message}
+            data={
+                "conversation_id": conversation.conversation_id,
+                "message": response_message
+            }
         )
     
     async def _handle_feature_approval(
@@ -288,7 +384,10 @@ class ConversationOrchestrator:
         
         yield StreamEvent(
             type="message_end",
-            data={"message": response}
+            data={
+                "conversation_id": conversation.conversation_id,
+                "message": response
+            }
         )
         
         # Auto-trigger implementation
@@ -303,7 +402,10 @@ class ConversationOrchestrator:
         
         yield StreamEvent(
             type="implementation_started",
-            data={"message": "Starting implementation..."}
+            data={
+                "conversation_id": conversation.conversation_id,
+                "message": "Starting implementation..."
+            }
         )
         
         conversation.phase = ConversationPhase.IMPLEMENTATION
@@ -330,38 +432,80 @@ DATABASE: {conversation.approved_features.database_type}
 """
         
         # Stream implementation progress
-        async for event in self.code_generator.generate_with_streaming({
-            "description": implementation_description,
-            "database_preference": conversation.approved_features.database_type
-        }):
-            # Forward events
-            if event.get("type") == "file_generated":
-                yield StreamEvent(
-                    type="file_generated",
-                    data=event.get("data", {})
-                )
-            elif event.get("type") == "phase_started":
-                yield StreamEvent(
-                    type="phase_change",
-                    data=event.get("data", {})
-                )
-            elif event.get("type") == "completed":
-                # Store generated code
-                code_data = event.get("data", {})
-                conversation.generated_code = GeneratedCode(
-                    files=code_data.get("code_files", []),
-                    file_structure=code_data.get("file_structure", {}),
-                    setup_instructions=code_data.get("setup_instructions", [])
-                )
-                conversation.phase = ConversationPhase.CODE_GENERATED
+        try:
+            async for event in self.code_generator.generate_with_streaming({
+                "description": implementation_description,
+                "database": conversation.approved_features.database_type,
+                "language": "nextjs"
+            }):
+                # Forward events
+                event_type = event.get("type")
                 
-                yield StreamEvent(
-                    type="code_generated",
-                    data={
-                        "message": "Implementation complete! You can now request modifications if needed.",
-                        "files": code_data.get("code_files", [])
-                    }
-                )
+                if event_type == "file_generated":
+                    # Backend sends 'file' key, not 'data'
+                    file_data = event.get("file", event.get("data", {}))
+                    yield StreamEvent(
+                        type="file_generated",
+                        data={
+                            "conversation_id": conversation.conversation_id,
+                            **file_data
+                        }
+                    )
+                elif event_type == "phase_started":
+                    yield StreamEvent(
+                        type="phase_change",
+                        data={
+                            "conversation_id": conversation.conversation_id,
+                            "phase": event.get("phase", ""),
+                            "message": event.get("phase", "Processing...")
+                        }
+                    )
+                elif event_type == "agent_started":
+                    # Forward agent progress
+                    yield StreamEvent(
+                        type="phase_change",
+                        data={
+                            "conversation_id": conversation.conversation_id,
+                            "phase": event.get("agent", ""),
+                            "message": event.get("activity", "Working...")
+                        }
+                    )
+                elif event_type == "completed":
+                    # Store generated code
+                    code_data = event.get("data", {})
+                    conversation.generated_code = GeneratedCode(
+                        files=code_data.get("code_files", []),
+                        file_structure=code_data.get("file_structure", {}),
+                        setup_instructions=code_data.get("setup_instructions", [])
+                    )
+                    conversation.phase = ConversationPhase.CODE_GENERATED
+                    
+                    yield StreamEvent(
+                        type="code_generated",
+                        data={
+                            "conversation_id": conversation.conversation_id,
+                            "message": "Implementation complete! You can now request modifications if needed.",
+                            "files": code_data.get("code_files", [])
+                        }
+                    )
+                elif event_type == "error":
+                    # Forward errors
+                    yield StreamEvent(
+                        type="error",
+                        data={
+                            "conversation_id": conversation.conversation_id,
+                            "error": event.get("error", "Unknown error occurred")
+                        }
+                    )
+        except Exception as e:
+            logger.error("implementation_error", error=str(e), conversation_id=conversation.conversation_id)
+            yield StreamEvent(
+                type="error",
+                data={
+                    "conversation_id": conversation.conversation_id,
+                    "error": f"Implementation failed: {str(e)}"
+                }
+            )
     
     async def _handle_code_modification(
         self,
@@ -373,13 +517,19 @@ DATABASE: {conversation.approved_features.database_type}
         if not conversation.generated_code:
             yield StreamEvent(
                 type="error",
-                data={"error": "No code has been generated yet"}
+                data={
+                    "conversation_id": conversation.conversation_id,
+                    "error": "No code has been generated yet"
+                }
             )
             return
         
         yield StreamEvent(
             type="message_start",
-            data={"message": "Analyzing modification request..."}
+            data={
+                "conversation_id": conversation.conversation_id,
+                "message": "Analyzing modification request..."
+            }
         )
         
         conversation.phase = ConversationPhase.MODIFICATION
@@ -419,6 +569,7 @@ DATABASE: {conversation.approved_features.database_type}
         yield StreamEvent(
             type="modification_applied",
             data={
+                "conversation_id": conversation.conversation_id,
                 "modified_files": modified_files,
                 "new_files": new_files,
                 "summary": modifications.get("modification_summary", "")
@@ -442,7 +593,35 @@ Modified {len(modified_files)} file(s) and added {len(new_files)} new file(s).
         
         yield StreamEvent(
             type="message_end",
-            data={"message": response_message}
+            data={
+                "conversation_id": conversation.conversation_id,
+                "message": response_message
+            }
+        )
+    
+    async def _handle_clarification(
+        self,
+        conversation: ConversationState,
+        routing_decision
+    ) -> AsyncGenerator[StreamEvent, None]:
+        """Handle requests that need clarification"""
+        
+        # Ask for clarification based on routing reasoning
+        clarification_msg = ConversationMessage(
+            id=str(uuid.uuid4()),
+            role=MessageRole.ASSISTANT,
+            content=f"I need a bit more information to help you effectively. {routing_decision.reasoning}\n\n"
+                   f"Could you please provide more details about what you'd like to build?",
+            timestamp=datetime.now(timezone.utc)
+        )
+        conversation.messages.append(clarification_msg)
+        
+        yield StreamEvent(
+            type="message_end",
+            data={
+                "conversation_id": conversation.conversation_id,
+                "message": clarification_msg.content
+            }
         )
     
     async def _handle_general_conversation(
@@ -466,7 +645,7 @@ Modified {len(modified_files)} file(s) and added {len(new_files)} new file(s).
             system_prompt="""You are a helpful AI software architect assistant. 
 You're having a conversation with a user about their software project.
 Be helpful, ask clarifying questions, and guide them toward a clear problem statement.
-If they seem ready to start planning features, suggest they say "let's start planning" or similar.""",
+If they seem ready to start planning features, suggest they describe what they want to build.""",
             temperature=0.7
         )
         
@@ -480,26 +659,46 @@ If they seem ready to start planning features, suggest they say "let's start pla
         
         yield StreamEvent(
             type="message_end",
-            data={"message": response["content"]}
+            data={
+                "conversation_id": conversation.conversation_id,
+                "message": response["content"]
+            }
         )
     
-    def _infer_action(self, conversation: ConversationState, message: str) -> str:
-        """Infer user intent from message"""
-        message_lower = message.lower()
+    # REMOVED: _infer_action method - replaced with LLM-based RouterAgent
+    # All routing decisions are now made by the RouterAgent using LLM intelligence
+    # instead of keyword matching. See router_agent.py for the implementation.
+    
+    def _generate_change_summary(
+        self,
+        previous_features: List[Feature],
+        new_features: List[Feature],
+        is_adding: bool,
+        is_removing: bool
+    ) -> str:
+        """Generate a summary of what changed in the feature plan"""
         
-        if conversation.phase == ConversationPhase.INITIAL:
-            return "plan"
-        elif conversation.phase == ConversationPhase.FEATURE_REFINEMENT:
-            if any(word in message_lower for word in ["approve", "looks good", "perfect", "let's go", "start", "implement"]):
-                return "approve"
-            return "refine"
-        elif conversation.phase == ConversationPhase.FEATURES_APPROVED:
-            return "implement"
-        elif conversation.phase in [ConversationPhase.CODE_GENERATED, ConversationPhase.MODIFICATION]:
-            if any(word in message_lower for word in ["change", "modify", "add", "remove", "fix", "update"]):
-                return "modify"
+        prev_titles = {f.title.lower(): f for f in previous_features}
+        new_titles = {f.title.lower(): f for f in new_features}
         
-        return "chat"
+        # Find added, removed, and kept features
+        added = [f for f in new_features if f.title.lower() not in prev_titles]
+        removed = [f for f in previous_features if f.title.lower() not in new_titles]
+        kept_count = len([f for f in new_features if f.title.lower() in prev_titles])
+        
+        # Generate appropriate message
+        if is_adding and added and not removed:
+            added_titles = ", ".join([f.title for f in added])
+            return f"✅ I've **added {len(added)} new feature(s)** to your plan: **{added_titles}**\n\nYour plan now has **{len(new_features)} total features** ({kept_count} existing + {len(added)} new)."
+        elif is_removing and removed:
+            removed_titles = ", ".join([f.title for f in removed])
+            return f"✅ I've **removed {len(removed)} feature(s)**: {removed_titles}\n\nYour plan now has **{len(new_features)} features**."
+        elif added and removed:
+            return f"✅ I've updated your plan: **Added {len(added)}** feature(s), **Removed {len(removed)}** feature(s).\n\nYour plan now has **{len(new_features)} total features**."
+        elif added and not removed:
+            return f"✅ I've added **{len(added)} new feature(s)** to your plan.\n\nYour plan now has **{len(new_features)} total features**."
+        else:
+            return f"✅ I've updated the feature plan based on your feedback."
     
     def _format_feature_plan_message(self, feature_plan: Dict[str, Any]) -> str:
         """Format feature plan as conversational message"""
