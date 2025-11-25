@@ -6,7 +6,7 @@ import {
   Sparkles, Play, Bot, User
 } from 'lucide-react';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8500';
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
 interface Message {
   id: string;
@@ -48,8 +48,10 @@ function ChatApp() {
   const [codeFiles, setCodeFiles] = useState<CodeFile[]>([]);
   const [selectedFile, setSelectedFile] = useState<CodeFile | null>(null);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set(['root']));
+  const [streamingMessage, setStreamingMessage] = useState<string>('');
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const codeScrollRef = useRef<HTMLDivElement>(null);
   const readerRef = useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null);
   const chatInputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -99,6 +101,15 @@ function ChatApp() {
       let buffer = '';
       let assistantMessage = '';
 
+      // Create a placeholder message for streaming
+      const streamingMessageId = Date.now().toString();
+      setMessages(prev => [...prev, {
+        id: streamingMessageId,
+        role: 'assistant',
+        content: '',
+        timestamp: new Date().toISOString()
+      }]);
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -122,37 +133,100 @@ function ChatApp() {
 
               case 'phase_change':
                 setPhase(data.data.phase);
-                assistantMessage += `\n[${data.data.message}]\n\n`;
+                const phaseMsg = `\n🔄 ${data.data.message}\n\n`;
+                assistantMessage += phaseMsg;
+                // Update streaming message in real-time
+                setMessages(prev => prev.map(msg => 
+                  msg.id === streamingMessageId 
+                    ? { ...msg, content: assistantMessage }
+                    : msg
+                ));
                 break;
 
               case 'features_proposed':
+                // Capture conversation_id from features_proposed event
+                if (!conversationId && data.data.conversation_id) {
+                  setConversationId(data.data.conversation_id);
+                }
                 const features = data.data.features || [];
                 setProposedFeatures(features);
                 break;
 
               case 'file_generated':
                 const file = data.data;
-                setCodeFiles(prev => [...prev, file]);
+                setCodeFiles(prev => {
+                  // Check if file already exists, update it; otherwise add it
+                  const existingIndex = prev.findIndex(f => f.filepath === file.filepath);
+                  if (existingIndex >= 0) {
+                    const updated = [...prev];
+                    updated[existingIndex] = file;
+                    return updated;
+                  }
+                  return [...prev, file];
+                });
                 if (!selectedFile) {
                   setSelectedFile(file);
+                }
+                // Show file generation in chat
+                const fileMsg = `\n✅ Generated: \`${file.filename}\`\n`;
+                assistantMessage += fileMsg;
+                setMessages(prev => prev.map(msg => 
+                  msg.id === streamingMessageId 
+                    ? { ...msg, content: assistantMessage }
+                    : msg
+                ));
+                // Auto-scroll code view to new file
+                if (codeScrollRef.current) {
+                  codeScrollRef.current.scrollTop = codeScrollRef.current.scrollHeight;
                 }
                 break;
 
               case 'code_generated':
-                assistantMessage += data.data.message;
+                assistantMessage += `\n${data.data.message}\n`;
                 const files = data.data.files || [];
-                setCodeFiles(files);
-                if (files.length > 0 && !selectedFile) {
-                  setSelectedFile(files[0]);
+                if (files.length > 0) {
+                  setCodeFiles(files);
+                  if (!selectedFile) {
+                    setSelectedFile(files[0]);
+                  }
                 }
+                setMessages(prev => prev.map(msg => 
+                  msg.id === streamingMessageId 
+                    ? { ...msg, content: assistantMessage }
+                    : msg
+                ));
                 break;
 
               case 'message_end':
+                // Capture conversation_id from message_end event
+                if (!conversationId && data.data.conversation_id) {
+                  setConversationId(data.data.conversation_id);
+                }
                 assistantMessage += data.data.message || '';
+                setMessages(prev => prev.map(msg => 
+                  msg.id === streamingMessageId 
+                    ? { ...msg, content: assistantMessage }
+                    : msg
+                ));
+                break;
+
+              case 'implementation_started':
+                const implMsg = `\n🚀 ${data.data.message}\n`;
+                assistantMessage += implMsg;
+                setMessages(prev => prev.map(msg => 
+                  msg.id === streamingMessageId 
+                    ? { ...msg, content: assistantMessage }
+                    : msg
+                ));
                 break;
 
               case 'error':
-                assistantMessage += `\n[ERROR] ${data.data.error}\n`;
+                assistantMessage += `\n❌ ERROR: ${data.data.error}\n`;
+                setMessages(prev => prev.map(msg => 
+                  msg.id === streamingMessageId 
+                    ? { ...msg, content: assistantMessage }
+                    : msg
+                ));
                 break;
             }
           } catch (e) {
@@ -161,14 +235,16 @@ function ChatApp() {
         }
       }
 
+      // Final update to remove any empty content
       if (assistantMessage.trim()) {
-        const aiMessage: Message = {
-          id: Date.now().toString(),
-          role: 'assistant',
-          content: assistantMessage.trim(),
-          timestamp: new Date().toISOString()
-        };
-        setMessages(prev => [...prev, aiMessage]);
+        setMessages(prev => prev.map(msg => 
+          msg.id === streamingMessageId 
+            ? { ...msg, content: assistantMessage.trim() }
+            : msg
+        ));
+      } else {
+        // Remove the message if it's empty
+        setMessages(prev => prev.filter(msg => msg.id !== streamingMessageId));
       }
 
       readerRef.current = null;
@@ -301,9 +377,9 @@ function ChatApp() {
       {/* Main Content - Split Screen */}
       <div className="flex-1 flex overflow-hidden">
         {/* Left: Chat Interface (30%) */}
-        <div className="w-full md:w-[35%] lg:w-[30%] glass-dark border-r border-gray-700/50 flex flex-col">
+        <div className="w-full md:w-[35%] lg:w-[30%] glass-dark border-r border-gray-700/50 flex flex-col overflow-hidden">
           {/* Chat Messages */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin">
+          <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-4 scrollbar-thin">
             {messages.length === 0 && (
               <div className="text-center py-12 animate-in">
                 <Bot size={48} className="mx-auto mb-4 text-blue-400 opacity-50" />
@@ -435,7 +511,7 @@ function ChatApp() {
               {/* File Explorer & Editor Split */}
               <div className="flex flex-1 overflow-hidden">
                 {/* File Tree */}
-                <div className="w-64 glass-dark border-r border-gray-700/50 flex flex-col">
+                <div className="w-64 glass-dark border-r border-gray-700/50 flex flex-col overflow-hidden">
                   <div className="px-3 py-3 border-b border-gray-700/50">
                     <div className="flex items-center gap-2 text-gray-400 text-xs font-semibold">
                       <FolderTree size={16} className="text-blue-400" />
@@ -443,16 +519,16 @@ function ChatApp() {
                       <span className="ml-auto badge-blue text-xs">{codeFiles.length}</span>
                     </div>
                   </div>
-                  <div className="flex-1 overflow-y-auto scrollbar-thin">
+                  <div ref={codeScrollRef} className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-thin">
                     {tree && tree.children && tree.children.map(child => renderTreeNode(child, 0))}
                   </div>
                 </div>
 
                 {/* Code Editor */}
-                <div className="flex-1 flex flex-col">
+                <div className="flex-1 flex flex-col overflow-hidden">
                   {selectedFile ? (
                     <>
-                      <div className="bg-editor-sidebar border-b border-editor-border px-4 py-2 flex items-center justify-between">
+                      <div className="bg-editor-sidebar border-b border-editor-border px-4 py-2 flex items-center justify-between shrink-0">
                         <div className="flex items-center gap-2">
                           <Code size={16} className="text-blue-400" />
                           <span className="text-sm text-white font-medium">{selectedFile.filename}</span>
@@ -460,7 +536,7 @@ function ChatApp() {
                         <span className="text-xs text-gray-400">{selectedFile.language.toUpperCase()}</span>
                       </div>
                       
-                      <div className="flex-1 overflow-hidden">
+                      <div className="flex-1 overflow-hidden min-h-0">
                         <Editor
                           height="100%"
                           language={selectedFile.language}

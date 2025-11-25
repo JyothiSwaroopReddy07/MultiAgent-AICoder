@@ -176,7 +176,7 @@ class BaseAgent(ABC):
         logger.debug(
             "llm_call_completed",
             agent=self.role.value,
-            tokens_used=response["usage"]["total_tokens"],
+            tokens_used=response["usage"].total_tokens,
             model=response.get("model", "unknown")
         )
 

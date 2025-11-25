@@ -1,8 +1,8 @@
 """
 Data models and schemas for the AI Coder system
 """
-from typing import List, Dict, Optional, Any
-from pydantic import BaseModel, Field
+from typing import List, Dict, Optional, Any, Literal
+from pydantic import BaseModel, Field, field_validator
 from enum import Enum
 from datetime import datetime, timezone
 
@@ -88,12 +88,40 @@ class AgentMessage(BaseModel):
 
 
 class Plan(BaseModel):
-    """Implementation plan created by Planner agent"""
+    """Implementation plan created by Planner agent (Legacy - prefer FeaturePlan for new code)"""
     overview: str = Field(..., description="High-level overview of the plan")
     steps: List[str] = Field(..., description="Detailed implementation steps")
     file_structure: Dict[str, str] = Field(..., description="Proposed file structure")
     dependencies: List[str] = Field(default=[], description="Required dependencies")
-    estimated_complexity: str = Field(..., description="Complexity estimate (low/medium/high)")
+    estimated_complexity: Literal["simple", "medium", "complex"] = Field(default="medium", description="Complexity estimate (simple/medium/complex)")
+    
+    @field_validator('estimated_complexity', mode='before')
+    @classmethod
+    def normalize_complexity(cls, v):
+        """Normalize estimated_complexity to valid values"""
+        if not v or not isinstance(v, str):
+            return "medium"
+        
+        v_lower = str(v).lower().strip()
+        
+        # Handle empty strings, null, none
+        if not v_lower or v_lower in ["null", "none", "", "undefined"]:
+            return "medium"
+        
+        # Map invalid values to valid ones (including legacy values)
+        complexity_map = {
+            "simple": "simple",
+            "medium": "medium",
+            "complex": "complex",
+            "low": "simple",      # Map legacy 'low' to 'simple'
+            "high": "complex",    # Map legacy 'high' to 'complex'
+            "easy": "simple",
+            "moderate": "medium",
+            "difficult": "complex",
+            "hard": "complex"
+        }
+        
+        return complexity_map.get(v_lower, "medium")
 
 
 class GeneratedCode(BaseModel):

@@ -1,77 +1,77 @@
 #!/bin/bash
 
-# AI Coder Startup Script
+# AI Code Generator Startup Script
 
-echo "╔═══════════════════════════════════════════════════════════╗"
-echo "║                                                           ║"
-echo "║              AI Coder Multi-Agent System                  ║"
-echo "║                                                           ║"
-echo "╚═══════════════════════════════════════════════════════════╝"
+echo "🚀 Starting AI Code Generator..."
 echo ""
 
-# Check if .env exists
-if [ ! -f ".env" ]; then
-    echo "⚠️  Warning: .env file not found!"
-    echo "Creating .env from .env.example..."
-    cp .env.example .env
+# Check for API key
+if [ -z "$OPENAI_API_KEY" ]; then
+    echo "❌ ERROR: OPENAI_API_KEY not set!"
     echo ""
-    echo "⚠️  IMPORTANT: Please edit .env and add your OPENAI_API_KEY!"
-    echo "   nano .env"
+    echo "Please set your OpenAI API key:"
     echo ""
-    read -p "Press Enter after adding your API key..."
+    echo "  export OPENAI_API_KEY='sk-proj-xxxxx'"
+    echo ""
+    echo "Or create a .env file in backend/ with:"
+    echo "  OPENAI_API_KEY=sk-proj-xxxxx"
+    echo ""
+    echo "Get your API key from: https://platform.openai.com/api-keys"
+    exit 1
 fi
 
-# Check if Python virtual environment exists
-if [ ! -d "backend/venv" ]; then
-    echo "📦 Creating Python virtual environment..."
-    cd backend
-    python3 -m venv venv
-    cd ..
-fi
-
-# Activate virtual environment and install backend dependencies
-echo "📦 Installing backend dependencies..."
-cd backend
-source venv/bin/activate
-pip install -r requirements.txt > /dev/null 2>&1
-cd ..
-
-# Install frontend dependencies if needed
-if [ ! -d "frontend/node_modules" ]; then
-    echo "📦 Installing frontend dependencies..."
-    cd frontend
-    npm install
-    cd ..
-fi
-
+echo "✅ API key found"
 echo ""
-echo "✅ Setup complete!"
-echo ""
-echo "🚀 Starting backend server on port 8000..."
+
+# Kill existing processes
+echo "🧹 Cleaning up old processes..."
+pkill -f "main_enhanced.py" 2>/dev/null
+lsof -ti:8000 | xargs kill -9 2>/dev/null
+lsof -ti:3000 | xargs kill -9 2>/dev/null
+sleep 2
+
+# Start backend
+echo "🔧 Starting backend on http://localhost:8000..."
 cd backend
-source venv/bin/activate
-python main.py &
+nohup python main_enhanced.py > /tmp/backend.log 2>&1 &
 BACKEND_PID=$!
 cd ..
 
-echo "⏳ Waiting for backend to start..."
-sleep 3
+# Wait for backend
+sleep 5
 
-echo "🚀 Starting frontend server on port 3000..."
+# Check backend health
+if curl -s http://localhost:8000/api/chat/health | grep -q "healthy"; then
+    echo "✅ Backend is running"
+else
+    echo "❌ Backend failed to start. Check /tmp/backend.log"
+    exit 1
+fi
+
+# Start frontend
+echo "🎨 Starting frontend on http://localhost:3000..."
 cd frontend
-npm start &
+nohup npm start > /tmp/frontend.log 2>&1 &
 FRONTEND_PID=$!
 cd ..
 
-echo ""
-echo "✅ AI Coder is running!"
-echo ""
-echo "   Backend:  http://localhost:8000"
-echo "   Frontend: http://localhost:3000"
-echo "   API Docs: http://localhost:8000/docs"
-echo ""
-echo "Press Ctrl+C to stop all servers"
+sleep 8
 
-# Wait for Ctrl+C
-trap "kill $BACKEND_PID $FRONTEND_PID; exit" INT
-wait
+echo ""
+echo "=========================================="
+echo "  🎉 AI Code Generator is Ready!"
+echo "=========================================="
+echo ""
+echo "  Frontend: http://localhost:3000"
+echo "  Backend:  http://localhost:8000"
+echo "  API Docs: http://localhost:8000/docs"
+echo ""
+echo "  Backend logs:  tail -f /tmp/backend.log"
+echo "  Frontend logs: tail -f /tmp/frontend.log"
+echo ""
+echo "  To stop:"
+echo "    pkill -f main_enhanced.py"
+echo "    pkill -f react-scripts"
+echo ""
+echo "=========================================="
+echo ""
