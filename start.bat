@@ -14,7 +14,7 @@ if not exist ".env" (
     echo Creating .env from .env.example...
     copy .env.example .env
     echo.
-    echo ⚠️  IMPORTANT: Please edit .env and add your OPENAI_API_KEY!
+    echo ⚠️  IMPORTANT: Please edit .env and add your GEMINI_API_KEY!
     echo    notepad .env
     echo.
     pause

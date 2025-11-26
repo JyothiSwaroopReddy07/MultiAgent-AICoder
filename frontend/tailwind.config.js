@@ -34,19 +34,20 @@ module.exports = {
         }
       },
       fontFamily: {
-        mono: ['Fira Code', 'Consolas', 'Monaco', 'Courier New', 'monospace'],
-        sans: ['Inter', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
+        mono: ['JetBrains Mono', 'Fira Code', 'Consolas', 'Monaco', 'monospace'],
+        sans: ['Plus Jakarta Sans', 'Inter', 'system-ui', 'sans-serif'],
       },
       animation: {
         'fade-in': 'fadeIn 0.3s ease-in-out',
         'slide-in': 'slideIn 0.3s ease-out',
         'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
         'shimmer': 'shimmer 2s linear infinite',
+        'bounce-in': 'bounceIn 0.5s ease-out',
       },
       keyframes: {
         fadeIn: {
-          '0%': { opacity: '0' },
-          '100%': { opacity: '1' },
+          '0%': { opacity: '0', transform: 'translateY(10px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
         },
         slideIn: {
           '0%': { transform: 'translateY(-10px)', opacity: '0' },
@@ -56,6 +57,12 @@ module.exports = {
           '0%': { backgroundPosition: '-1000px 0' },
           '100%': { backgroundPosition: '1000px 0' },
         },
+        bounceIn: {
+          '0%': { opacity: '0', transform: 'scale(0.3)' },
+          '50%': { opacity: '1', transform: 'scale(1.05)' },
+          '70%': { transform: 'scale(0.9)' },
+          '100%': { transform: 'scale(1)' },
+        },
       },
       backdropBlur: {
         xs: '2px',
@@ -63,9 +70,12 @@ module.exports = {
       boxShadow: {
         'glow': '0 0 20px rgba(59, 130, 246, 0.5)',
         'glow-lg': '0 0 40px rgba(59, 130, 246, 0.6)',
+        'glow-cyan': '0 0 20px rgba(6, 182, 212, 0.5)',
+        'glow-purple': '0 0 20px rgba(139, 92, 246, 0.5)',
       },
     },
   },
-  plugins: [],
+  plugins: [
+    require('tailwind-scrollbar')({ nocompatible: true }),
+  ],
 }
-

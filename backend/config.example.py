@@ -8,13 +8,13 @@ Or use environment variables directly via .env file
 # REQUIRED CONFIGURATION
 # ============================================================================
 
-# OpenAI API Key (REQUIRED)
-# Get your API key from: https://platform.openai.com/api-keys
-OPENAI_API_KEY = "sk-your-api-key-here"
+# Gemini API Key (REQUIRED)
+# Get your API key from: https://makersuite.google.com/app/apikey
+GEMINI_API_KEY = "AIzaSyD-CwCrZHZHw4Nc32OCYe0G2WUNntg_S28"
 
-# OpenAI Model Selection
-OPENAI_MODEL = "gpt-4"  # Primary model (recommended: gpt-4, gpt-4-turbo)
-OPENAI_FALLBACK_MODEL = "gpt-3.5-turbo"  # Fallback model for cost efficiency
+# Gemini Model Selection
+GEMINI_MODEL = "gemini-pro"  # Primary model (recommended: gemini-pro, gemini-1.5-pro)
+GEMINI_FALLBACK_MODEL = "gemini-pro"  # Fallback model for cost efficiency
 
 # ============================================================================
 # SERVER CONFIGURATION

@@ -9,10 +9,10 @@ from functools import lru_cache
 class Settings(BaseSettings):
     """Application settings"""
 
-    # OpenAI Configuration
-    openai_api_key: str = ""
-    openai_model: str = "gpt-4"
-    openai_fallback_model: str = "gpt-3.5-turbo"
+    # Gemini Configuration  
+    gemini_api_key: str = "AIzaSyD-CwCrZHZHw4Nc32OCYe0G2WUNntg_S28"
+    gemini_model: str = "gemini-2.5-flash"  # Updated to valid model
+    gemini_fallback_model: str = "gemini-2.0-flash"  # Fallback model
 
     # Server Configuration
     backend_port: int = 8000
@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = False
+        extra = "ignore"  # Ignore extra fields (backward compatibility)
 
 
 @lru_cache()

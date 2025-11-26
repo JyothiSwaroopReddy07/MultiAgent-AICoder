@@ -6,17 +6,17 @@ echo "🚀 Starting AI Code Generator..."
 echo ""
 
 # Check for API key
-if [ -z "$OPENAI_API_KEY" ]; then
-    echo "❌ ERROR: OPENAI_API_KEY not set!"
+if [ -z "$GEMINI_API_KEY" ]; then
+    echo "❌ ERROR: GEMINI_API_KEY not set!"
     echo ""
-    echo "Please set your OpenAI API key:"
+    echo "Please set your Gemini API key:"
     echo ""
-    echo "  export OPENAI_API_KEY='sk-proj-xxxxx'"
+    echo "  export GEMINI_API_KEY='AIzaSyD-xxxxx'"
     echo ""
     echo "Or create a .env file in backend/ with:"
-    echo "  OPENAI_API_KEY=sk-proj-xxxxx"
+    echo "  GEMINI_API_KEY=AIzaSyD-xxxxx"
     echo ""
-    echo "Get your API key from: https://platform.openai.com/api-keys"
+    echo "Get your API key from: https://makersuite.google.com/app/apikey"
     exit 1
 fi
 
