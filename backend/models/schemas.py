@@ -44,10 +44,7 @@ class AgentRole(str, Enum):
     INTEGRATION_TESTER = "integration_tester"
     DEPLOYMENT_PLANNER = "deployment_planner"
     
-    # Phase 6: Monitoring & Orchestration
-    MONITOR = "monitor"
-    ERROR_HANDLER = "error_handler"
-    ORCHESTRATOR = "orchestrator"
+    # Note: Phase 6 (Monitoring) removed - not needed for core code generation
 
 
 class MessageType(str, Enum):

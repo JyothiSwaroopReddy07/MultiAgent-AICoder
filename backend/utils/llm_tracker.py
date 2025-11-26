@@ -14,10 +14,13 @@ class LLMTracker:
 
     # Pricing per 1K tokens (as of 2024 - update as needed)
     PRICING = {
-        "gpt-4": {"prompt": 0.03, "completion": 0.06},
-        "gpt-4-turbo": {"prompt": 0.01, "completion": 0.03},
-        "gpt-3.5-turbo": {"prompt": 0.0015, "completion": 0.002},
-        "gpt-3.5-turbo-16k": {"prompt": 0.003, "completion": 0.004},
+        "gemini-pro": {"prompt": 0.0005, "completion": 0.0015},
+        "gemini-1.5-pro": {"prompt": 0.00125, "completion": 0.005},
+        "gemini-1.5-flash": {"prompt": 0.000075, "completion": 0.0003},
+        "gemini-2.5-pro": {"prompt": 0.0035, "completion": 0.0105},
+        "gemini-2.5-flash": {"prompt": 0.00035, "completion": 0.00105},
+        "gemini-2.0-flash": {"prompt": 0.0001, "completion": 0.0003},
+        "gemini-ultra": {"prompt": 0.0125, "completion": 0.0375},
     }
 
     def __init__(self):
@@ -86,8 +89,8 @@ class LLMTracker:
                 break
 
         if model_key not in self.PRICING:
-            logger.warning(f"Unknown model for pricing: {model}, defaulting to gpt-3.5-turbo")
-            model_key = "gpt-3.5-turbo"
+            logger.warning(f"Unknown model for pricing: {model}, defaulting to gemini-pro")
+            model_key = "gemini-pro"
 
         pricing = self.PRICING[model_key]
         prompt_cost = (prompt_tokens / 1000) * pricing["prompt"]

@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -9,12 +11,18 @@
     box-sizing: border-box;
   }
 
+  html, body, #root {
+    height: 100%;
+    max-height: 100vh;
+    overflow: hidden;
+  }
+
   html {
     scroll-behavior: smooth;
   }
 
   body {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
       'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
       sans-serif;
     -webkit-font-smoothing: antialiased;
@@ -22,22 +30,52 @@
     @apply bg-gray-900 text-gray-100;
   }
 
-  /* Custom scrollbar */
-  ::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+  code, pre, .font-mono {
+    font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
   }
 
-  ::-webkit-scrollbar-track {
-    @apply bg-gray-800;
+  /* ============================================
+   * MONACO EDITOR SCROLLBAR - Purple Theme
+   * These override Monaco's internal scrollbar
+   * ============================================ */
+  .monaco-editor .scrollbar {
+    background: transparent !important;
   }
 
-  ::-webkit-scrollbar-thumb {
-    @apply bg-gray-600 rounded-full;
+  .monaco-editor .scrollbar > .slider {
+    background: linear-gradient(180deg, #a855f7, #7c3aed) !important;
+    border-radius: 6px !important;
   }
 
-  ::-webkit-scrollbar-thumb:hover {
-    @apply bg-gray-500;
+  .monaco-editor .scrollbar > .slider:hover {
+    background: linear-gradient(180deg, #c084fc, #a855f7) !important;
+  }
+
+  .monaco-editor .scrollbar.vertical {
+    width: 14px !important;
+    background: rgba(30, 30, 46, 0.95) !important;
+    border-left: 1px solid #7c3aed40 !important;
+  }
+
+  .monaco-editor .scrollbar.horizontal {
+    height: 14px !important;
+    background: rgba(30, 30, 46, 0.95) !important;
+    border-top: 1px solid #7c3aed40 !important;
+  }
+
+  .monaco-editor .scrollbar.vertical > .slider {
+    width: 10px !important;
+    left: 2px !important;
+  }
+
+  .monaco-editor .scrollbar.horizontal > .slider {
+    height: 10px !important;
+    top: 2px !important;
+  }
+
+  .monaco-editor .decorationsOverviewRuler {
+    background: rgba(30, 30, 46, 0.95) !important;
+    width: 14px !important;
   }
 }
 
@@ -61,13 +99,38 @@
   }
 
   .btn-success {
-    @apply btn bg-green-600 hover:bg-green-700 text-white
-           focus:ring-green-500;
+    @apply btn bg-emerald-600 hover:bg-emerald-700 text-white
+           focus:ring-emerald-500 shadow-lg shadow-emerald-500/20;
   }
 
   .btn-danger {
     @apply btn bg-red-600 hover:bg-red-700 text-white
            focus:ring-red-500;
+  }
+
+  .btn-execute {
+    @apply relative overflow-hidden px-6 py-3 rounded-xl font-bold text-white
+           bg-gradient-to-r from-emerald-500 via-green-500 to-teal-500
+           hover:from-emerald-400 hover:via-green-400 hover:to-teal-400
+           transform hover:scale-105 active:scale-100
+           shadow-xl shadow-emerald-500/30
+           transition-all duration-300 ease-out
+           focus:outline-none focus:ring-4 focus:ring-emerald-400/50;
+  }
+
+  .btn-execute::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+    transition: left 0.5s ease;
+  }
+
+  .btn-execute:hover::before {
+    left: 100%;
   }
 
   /* Input styles */
@@ -101,7 +164,7 @@
   }
 
   .badge-green {
-    @apply badge bg-green-600/20 text-green-400 border border-green-500/30;
+    @apply badge bg-emerald-600/20 text-emerald-400 border border-emerald-500/30;
   }
 
   .badge-yellow {
@@ -111,12 +174,58 @@
   .badge-red {
     @apply badge bg-red-600/20 text-red-400 border border-red-500/30;
   }
+
+  .badge-purple {
+    @apply badge bg-purple-600/20 text-purple-400 border border-purple-500/30;
+  }
+
+  .badge-cyan {
+    @apply badge bg-cyan-600/20 text-cyan-400 border border-cyan-500/30;
+  }
+
+  /* Tab styles */
+  .tab {
+    @apply px-4 py-2.5 text-sm font-medium rounded-t-lg transition-all duration-200
+           border-b-2 border-transparent cursor-pointer
+           hover:bg-gray-700/50;
+  }
+
+  .tab-active {
+    @apply tab bg-gray-800 text-white border-b-2 border-blue-500
+           shadow-lg shadow-blue-500/10;
+  }
+
+  .tab-inactive {
+    @apply tab text-gray-400 hover:text-gray-200;
+  }
+
+  /* Pulse animation for execute button */
+  .pulse-green {
+    animation: pulseGreen 2s ease-in-out infinite;
+  }
+
+  @keyframes pulseGreen {
+    0%, 100% {
+      box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4);
+    }
+    50% {
+      box-shadow: 0 0 0 15px rgba(16, 185, 129, 0);
+    }
+  }
 }
 
 @layer utilities {
   /* Gradient text */
   .text-gradient {
     @apply bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-cyan-400;
+  }
+
+  .text-gradient-emerald {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-emerald-400 to-teal-400;
+  }
+
+  .text-gradient-purple {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-pink-400;
   }
 
   /* Glass morphism */
@@ -137,13 +246,21 @@
     box-shadow: 0 0 20px rgba(34, 197, 94, 0.3);
   }
 
-  /* Animations */
-  .animate-in {
-    animation: fadeIn 0.3s ease-in-out;
+  .shadow-glow-purple {
+    box-shadow: 0 0 20px rgba(139, 92, 246, 0.3);
+  }
+
+  .shadow-glow-cyan {
+    box-shadow: 0 0 20px rgba(6, 182, 212, 0.3);
   }
 
   /* Transitions */
   .transition-smooth {
     @apply transition-all duration-300 ease-in-out;
+  }
+
+  /* Loading skeleton */
+  .skeleton {
+    @apply animate-pulse bg-gray-700/50 rounded;
   }
 }

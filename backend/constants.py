@@ -75,7 +75,7 @@ class WorkflowPhaseNames:
     IMPLEMENTATION: Final[str] = "Phase 3: Implementation"
     QA: Final[str] = "Phase 4: Quality Assurance"
     VALIDATION: Final[str] = "Phase 5: Validation"
-    MONITORING: Final[str] = "Phase 6: Monitoring"
+    # Phase 6 (Monitoring) removed - not needed for core code generation
 
 # Error Messages
 class ErrorMessages:

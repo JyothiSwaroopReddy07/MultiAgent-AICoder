@@ -1,233 +1,205 @@
 """
-Base Agent class - Foundation for all specialized agents
-Implements best practices: error handling, timeout, logging, activity tracking
+Base Agent - Abstract base class for all agents
 """
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional, List
-import asyncio
+from typing import Dict, Any, List, Optional
+from datetime import datetime, timezone
+import uuid
 import structlog
 
-from models.schemas import AgentRole, AgentMessage, MessageType, AgentActivity
-from utils.openai_client import OpenAIClient
-from utils.decorators import timeout, log_execution_time, handle_errors
-from constants import AGENT_TIMEOUT, DEFAULT_MAX_TOKENS
-from datetime import datetime, timezone
+from models.schemas import AgentRole, AgentActivity, LLMUsage
+from utils.gemini_client import get_gemini_client
 
 logger = structlog.get_logger()
 
 
 class BaseAgent(ABC):
     """
-    Base class for all agents in the multi-agent system
-    Each agent has specific capabilities and communicates via MCP
+    Abstract base class for all agents in the multi-agent system.
+    
+    Provides common functionality:
+    - LLM interaction via Gemini
+    - Activity tracking
+    - MCP server integration
+    - Logging
     """
 
     def __init__(
         self,
         role: AgentRole,
-        mcp_server: 'MCPServer',
-        openai_client: OpenAIClient
+        mcp_server: Optional[Any] = None,
+        openai_client: Optional[Any] = None  # Legacy parameter, using Gemini
     ):
-        self.role = role
-        self.mcp = mcp_server
-        self.openai = openai_client
-        self.message_queue: asyncio.Queue = asyncio.Queue()
-        self.is_running = False
-        self.current_activity: Optional[AgentActivity] = None
-
-        # Register with MCP server
-        self.mcp.register_agent(self.role, self)
-
-        logger.info("agent_initialized", role=role.value)
-
-    @abstractmethod
-    async def process_task(self, task_data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Main task processing method - must be implemented by each agent
-
+        Initialize the base agent.
+        
         Args:
-            task_data: Data needed to perform the task
-
-        Returns:
-            Result of the task processing
+            role: The agent's role
+            mcp_server: Optional MCP server for inter-agent communication
+            openai_client: Legacy parameter, ignored (using Gemini instead)
         """
-        pass
+        self.role = role
+        self.mcp_server = mcp_server
+        self.gemini_client = get_gemini_client()
+        self.current_activity: Optional[AgentActivity] = None
+        self.activities: List[AgentActivity] = []
+        
+        logger.info("agent_initialized", role=role.value)
 
     @abstractmethod
     def get_system_prompt(self) -> str:
         """
-        Get the system prompt for this agent
-
+        Get the system prompt for this agent.
+        Must be implemented by subclasses.
+        
         Returns:
             System prompt string
         """
         pass
 
-    async def receive_message(self, message: AgentMessage):
-        """Receive and queue a message from MCP"""
-        await self.message_queue.put(message)
-        logger.debug(
-            "message_received",
-            agent=self.role.value,
-                from_=message.sender.value,
-            message_id=message.id
-        )
+    @abstractmethod
+    async def process_task(self, task_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Process a task.
+        Must be implemented by subclasses.
+        
+        Args:
+            task_data: Task data dictionary
+            
+        Returns:
+            Result dictionary
+        """
+        pass
 
-    async def send_message(
+    async def call_llm(
         self,
-        content: Dict[str, Any],
-        recipient: Optional[AgentRole] = None,
-        message_type: MessageType = MessageType.RESPONSE,
-        parent_id: Optional[str] = None
-    ) -> AgentMessage:
-        """Send a message via MCP"""
-        return await self.mcp.send_message(
-            sender=self.role,
-            content=content,
-            recipient=recipient,
-            message_type=message_type,
-            parent_id=parent_id
-        )
+        messages: List[Dict[str, str]],
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+        system_prompt: Optional[str] = None
+    ) -> str:
+        """
+        Call the LLM (Gemini) with messages.
+        
+        Args:
+            messages: List of message dicts with 'role' and 'content'
+            temperature: Optional temperature override
+            max_tokens: Optional max tokens override
+            system_prompt: Optional system prompt override
+            
+        Returns:
+            LLM response content string
+        """
+        try:
+            # Use provided system prompt or get from agent
+            sys_prompt = system_prompt or self.get_system_prompt()
+            
+            # Call Gemini client
+            response = await self.gemini_client.chat_completion(
+                messages=messages,
+                system_prompt=sys_prompt,
+                temperature=temperature,
+                max_tokens=max_tokens
+            )
+            
+            # Track usage if activity is active
+            if self.current_activity:
+                self.current_activity.llm_usage = LLMUsage(
+                    model=response.get("model", "gemini-2.5-flash"),
+                    prompt_tokens=response.get("usage", {}).get("prompt_tokens", 0),
+                    completion_tokens=response.get("usage", {}).get("completion_tokens", 0),
+                    total_tokens=response.get("usage", {}).get("total_tokens", 0),
+                    cost=response.get("usage", {}).get("cost", 0.0)
+                )
+            
+            return response.get("content", "")
+            
+        except Exception as e:
+            logger.error(
+                "llm_call_failed",
+                agent=self.role.value,
+                error=str(e)
+            )
+            raise
 
     async def start_activity(self, action: str) -> AgentActivity:
-        """Start tracking a new activity"""
+        """
+        Start tracking an activity.
+        
+        Args:
+            action: Description of the action being performed
+            
+        Returns:
+            The created AgentActivity
+        """
         self.current_activity = AgentActivity(
             agent=self.role,
             action=action,
             status="in_progress",
             start_time=datetime.now(timezone.utc)
         )
-
+        
         logger.info(
             "activity_started",
             agent=self.role.value,
             action=action
         )
-
+        
         return self.current_activity
 
-    async def complete_activity(self, status: str = "completed"):
-        """Complete the current activity"""
+    async def complete_activity(self, status: str = "completed") -> Optional[AgentActivity]:
+        """
+        Complete the current activity.
+        
+        Args:
+            status: Final status (completed/failed)
+            
+        Returns:
+            The completed AgentActivity
+        """
         if self.current_activity:
             self.current_activity.status = status
             self.current_activity.end_time = datetime.now(timezone.utc)
-
+            self.activities.append(self.current_activity)
+            
             logger.info(
                 "activity_completed",
                 agent=self.role.value,
                 action=self.current_activity.action,
                 status=status
             )
-
-    @timeout(AGENT_TIMEOUT)
-    @log_execution_time(log_level="debug")
-    async def call_llm(
-        self,
-        messages: List[Dict[str, str]],
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None
-    ) -> str:
-        """
-        Call LLM with automatic tracking, timeout, and logging
-        
-        Implements best practices:
-        - Timeout protection (5 minutes default)
-        - Execution time logging
-        - Usage tracking
-        - Error handling via OpenAI client retry logic
-
-        Args:
-            messages: Conversation messages
-            temperature: Optional temperature override
-            max_tokens: Optional max_tokens override (defaults to 4000)
-
-        Returns:
-            LLM response content
             
-        Raises:
-            TimeoutError: If call exceeds timeout
-            APIError: If OpenAI API fails after retries
+            activity = self.current_activity
+            self.current_activity = None
+            return activity
+            
+        return None
+
+    async def receive_message(self, message: Any) -> None:
         """
-        system_prompt = self.get_system_prompt()
+        Receive a message from the MCP server.
+        Override in subclasses for custom message handling.
         
-        # Use default max_tokens if not specified
-        if max_tokens is None:
-            max_tokens = DEFAULT_MAX_TOKENS
+        Args:
+            message: The received message
+        """
+        logger.debug(
+            "message_received",
+            agent=self.role.value,
+            message_id=getattr(message, 'id', 'unknown')
+        )
+
+    def get_activities(self) -> List[AgentActivity]:
+        """
+        Get all completed activities.
         
-        logger.debug(
-            "llm_call_started",
-            agent=self.role.value,
-            messages_count=len(messages),
-            temperature=temperature,
-            max_tokens=max_tokens
-        )
+        Returns:
+            List of AgentActivity objects
+        """
+        return self.activities
 
-        response = await self.openai.chat_completion(
-            messages=messages,
-            system_prompt=system_prompt,
-            temperature=temperature,
-            max_tokens=max_tokens
-        )
+    def reset_activities(self) -> None:
+        """Reset all tracked activities."""
+        self.activities = []
+        self.current_activity = None
 
-        # Track usage in current activity
-        if self.current_activity:
-            self.current_activity.llm_usage = response["usage"]
-        
-        logger.debug(
-            "llm_call_completed",
-            agent=self.role.value,
-            tokens_used=response["usage"].total_tokens,
-            model=response.get("model", "unknown")
-        )
-
-        return response["content"]
-
-    async def run(self):
-        """Run the agent's message processing loop"""
-        self.is_running = True
-        logger.info("agent_started", agent=self.role.value)
-
-        while self.is_running:
-            try:
-                message = await self.message_queue.get()
-                await self._handle_message(message)
-                self.message_queue.task_done()
-            except Exception as e:
-                logger.error(
-                    "agent_error",
-                    agent=self.role.value,
-                    error=str(e)
-                )
-
-    async def _handle_message(self, message: AgentMessage):
-        """Handle an incoming message"""
-        logger.debug(
-            "handling_message",
-            agent=self.role.value,
-            message_type=message.message_type.value
-        )
-
-        if message.message_type == MessageType.REQUEST:
-            try:
-                result = await self.process_task(message.content)
-
-                # Send response
-                await self.send_message(
-                    content=result,
-                    recipient=message.sender,
-                    message_type=MessageType.RESPONSE,
-                    parent_id=message.id
-                )
-            except Exception as e:
-                # Send error response
-                await self.send_message(
-                    content={"error": str(e)},
-                    recipient=message.sender,
-                    message_type=MessageType.ERROR,
-                    parent_id=message.id
-                )
-
-    def stop(self):
-        """Stop the agent"""
-        self.is_running = False
-        logger.info("agent_stopped", agent=self.role.value)

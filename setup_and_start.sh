@@ -6,15 +6,15 @@ echo "=========================================="
 echo ""
 
 # Check if API key is already set
-if [ -n "$OPENAI_API_KEY" ]; then
+if [ -n "$GEMINI_API_KEY" ]; then
     echo "✅ API key found in environment"
-elif [ -f "backend/.env" ] && grep -q "OPENAI_API_KEY" backend/.env; then
+elif [ -f "backend/.env" ] && grep -q "GEMINI_API_KEY" backend/.env; then
     echo "✅ API key found in .env file"
 else
-    echo "🔑 OpenAI API key is required"
+    echo "🔑 Gemini API key is required"
     echo ""
-    echo "Please enter your OpenAI API key:"
-    echo "(Get it from: https://platform.openai.com/api-keys)"
+    echo "Please enter your Gemini API key:"
+    echo "(Get it from: https://makersuite.google.com/app/apikey)"
     echo ""
     read -p "API Key: " api_key
     
@@ -26,8 +26,8 @@ else
     # Save to .env file
     echo "Saving API key to backend/.env..."
     cat > backend/.env << EOF
-OPENAI_API_KEY=$api_key
-OPENAI_MODEL=gpt-4o
+GEMINI_API_KEY=$api_key
+GEMINI_MODEL=gemini-pro
 TEMPERATURE=0.7
 MAX_TOKENS=4000
 BACKEND_PORT=8000
