@@ -2,17 +2,28 @@
 Configuration management
 """
 import os
-from pydantic_settings import BaseSettings
+from dotenv import load_dotenv
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from functools import lru_cache
+
+# Load .env file
+load_dotenv()
 
 
 class Settings(BaseSettings):
     """Application settings"""
+    
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore"
+    )
 
-    # Gemini Configuration  
-    gemini_api_key: str = "AIzaSyD-CwCrZHZHw4Nc32OCYe0G2WUNntg_S28"
-    gemini_model: str = "gemini-2.5-flash"  # Updated to valid model
-    gemini_fallback_model: str = "gemini-2.0-flash"  # Fallback model
+    # Gemini Configuration - explicitly loaded from .env
+    gemini_api_key: str = os.getenv("GEMINI_API_KEY", "")
+    gemini_model: str = "gemini-2.5-flash"
+    gemini_fallback_model: str = "gemini-2.0-flash"
 
     # Server Configuration
     backend_port: int = 8000
@@ -28,11 +39,6 @@ class Settings(BaseSettings):
     max_tokens: int = 4000
     temperature: float = 0.7
     max_retries: int = 3
-
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
-        extra = "ignore"  # Ignore extra fields (backward compatibility)
 
 
 @lru_cache()
