@@ -202,6 +202,12 @@ REMEMBER: ZERO COMMENTS IN THE CODE. The code should be self-explanatory through
             for f in features:
                 features_text += f"- **{f.get('name')}**: {f.get('description')}\n"
 
+        # Detect if Next.js or Vite project
+        framework = frontend.get('framework', '').lower()
+        is_nextjs = 'next' in framework
+        is_vite = 'vite' in framework
+        module_format = "CommonJS (module.exports)" if is_nextjs else "ESM (export default)" if is_vite else "auto-detect"
+        
         return f"""Generate the following file for this project:
 
 ## Project Overview
@@ -212,6 +218,7 @@ REMEMBER: ZERO COMMENTS IN THE CODE. The code should be self-explanatory through
 - Styling: {frontend.get('styling', 'N/A')}
 - Backend: {backend.get('framework', 'N/A')} with {backend.get('language', 'N/A')}
 - Database: {database.get('primary', 'N/A')} with {database.get('orm', 'N/A')}
+- **Config Module Format**: {module_format}
 
 ## File to Generate
 - **Path**: {file_spec.get('filepath')}
@@ -235,6 +242,40 @@ REMEMBER: ZERO COMMENTS IN THE CODE. The code should be self-explanatory through
 5. Use self-documenting variable and function names instead of comments
 6. Implement proper error handling
 7. Make it production-ready
+
+## CRITICAL: Module Format for Config Files
+
+**IMPORTANT: Different frameworks use different module formats!**
+
+For **Next.js** projects (using next.js or next.config.js):
+- **postcss.config.js** MUST use CommonJS: `module.exports = {{ plugins: {{ ... }} }}`
+- **tailwind.config.js** can use CommonJS or TypeScript
+- Use `module.exports` and `require()` syntax
+
+Example postcss.config.js for Next.js (CommonJS):
+```
+module.exports = {{
+  plugins: {{
+    tailwindcss: {{}},
+    autoprefixer: {{}},
+  }},
+}}
+```
+
+For **Vite** projects (using vite.config.ts):
+- **postcss.config.js** MUST use ESM: `export default {{ plugins: {{ ... }} }}`
+- **tailwind.config.js** MUST use ESM: `export default {{ ... }}`
+- Use `export default` and `import` syntax
+
+Example postcss.config.js for Vite (ESM):
+```
+export default {{
+  plugins: {{
+    tailwindcss: {{}},
+    autoprefixer: {{}},
+  }},
+}}
+```
 
 **ZERO COMMENTS ALLOWED. The code must be clean without any comments.**
 
