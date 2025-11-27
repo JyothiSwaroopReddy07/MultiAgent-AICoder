@@ -584,6 +584,24 @@ For each file, you specify:
 - **docs**: README, API docs, contributing guides
 - **infra**: Docker, CI/CD, deployment configs
 
+## CRITICAL: Required Config Files
+
+For **Vite + React + TypeScript** projects, ALWAYS include these config files:
+- package.json
+- tsconfig.json (main TypeScript config)
+- tsconfig.node.json (Vite/Node config - REQUIRED for Vite)
+- vite.config.ts
+- postcss.config.js (if using Tailwind)
+- tailwind.config.js (if using Tailwind)
+- index.html (Vite entry point)
+
+For **Next.js** projects, ALWAYS include:
+- package.json
+- tsconfig.json
+- next.config.js or next.config.mjs
+- postcss.config.js (if using Tailwind)
+- tailwind.config.js or tailwind.config.ts (if using Tailwind)
+
 ## Response Format
 
 ```json
