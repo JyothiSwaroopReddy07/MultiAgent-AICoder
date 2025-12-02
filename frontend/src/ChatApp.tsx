@@ -74,6 +74,7 @@ function ChatApp() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('editor');
   const [showExecuteButton, setShowExecuteButton] = useState(false);
   const [previewWindow, setPreviewWindow] = useState<Window | null>(null);
+  const [isDownloading, setIsDownloading] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const codeScrollRef = useRef<HTMLDivElement>(null);
@@ -509,15 +510,54 @@ function ChatApp() {
 
   const tree = codeFiles.length > 0 ? buildTree(codeFiles) : null;
 
+  const downloadSourceCode = useCallback(async () => {
+    if (codeFiles.length === 0) return;
+    
+    setIsDownloading(true);
+    try {
+      const response = await fetch(`${API_URL}/api/download`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          files: codeFiles
+        })
+      });
+      
+      if (!response.ok) throw new Error('Download failed');
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      
+      const contentDisposition = response.headers.get('Content-Disposition');
+      let filename = 'source-code.zip';
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="?([^"]+)"?/);
+        if (filenameMatch) filename = filenameMatch[1];
+      }
+      
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error('Download error:', error);
+    } finally {
+      setIsDownloading(false);
+    }
+  }, [codeFiles]);
+
   const renderExecuteButton = () => {
     if (!showExecuteButton) return null;
 
     return (
-      <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 z-50 animate-bounce-in">
+      <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 z-50 animate-bounce-in flex gap-4">
         <button
           onClick={executeApplication}
           disabled={appExecution.status === 'starting'}
-          className="btn-execute pulse-green flex items-center gap-3"
+          className="btn-execute pulse-green flex items-center gap-3 shadow-lg shadow-emerald-500/20"
         >
           {appExecution.status === 'starting' ? (
             <>
@@ -530,6 +570,20 @@ function ChatApp() {
               <span>Execute Application</span>
               <Zap size={16} className="text-yellow-300" />
             </>
+          )}
+        </button>
+        
+        <button
+          onClick={downloadSourceCode}
+          disabled={isDownloading}
+          className="px-6 py-3 bg-violet-600 hover:bg-violet-500 text-white rounded-full font-semibold transition-all transform hover:scale-105 active:scale-95 flex items-center gap-3 shadow-lg shadow-violet-500/20"
+        >
+          {isDownloading ? (
+            <Loader2 className="animate-spin" size={20} />
+          ) : (
+            <div className="flex items-center gap-2">
+              <span className="border-b-2 border-white pb-0.5">Download Source</span>
+            </div>
           )}
         </button>
       </div>
