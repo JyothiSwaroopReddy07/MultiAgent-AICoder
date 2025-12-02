@@ -12,10 +12,12 @@ class ConversationPhase(str, Enum):
     """Phases of conversation"""
     INITIAL = "initial"
     FEATURE_PLANNING = "feature_planning"
+    FEATURES_PROPOSED = "features_proposed"
     FEATURE_REFINEMENT = "feature_refinement"
     FEATURES_APPROVED = "features_approved"
     IMPLEMENTATION = "implementation"
     CODE_GENERATED = "code_generated"
+    TESTING = "testing"
     MODIFICATION = "modification"
     COMPLETED = "completed"
 
@@ -162,7 +164,10 @@ class ConversationState(BaseModel):
     # Problem statement
     problem_statement: Optional[str] = None
     
-    # Feature planning
+    # Feature planning (raw dict from feature planner)
+    feature_plan: Optional[Dict[str, Any]] = None
+    
+    # Feature planning (structured)
     proposed_features: Optional[FeaturePlan] = None
     approved_features: Optional[FeaturePlan] = None
     

@@ -26,6 +26,8 @@ from models.conversation_schemas import (
 )
 from agents.architect_agent import ArchitectAgent, FilePlannerAgent
 from agents.code_generator_agent import CodeGeneratorAgent, IntegrationValidatorAgent
+from agents.feature_planner_agent import FeaturePlannerAgent
+from agents.testing_agent import TestingAgent, DependencyValidator
 from utils.gemini_client import get_gemini_client
 from utils.llm_tracker import tracker
 from services.execution_service import (
@@ -95,10 +97,12 @@ class EnterpriseCodeOrchestrator:
     Enterprise-grade code generation orchestrator.
     
     Uses multiple specialized agents:
-    1. ArchitectAgent - Designs system architecture
-    2. FilePlannerAgent - Plans all files to generate
-    3. CodeGeneratorAgent - Generates each file
-    4. IntegrationValidatorAgent - Validates everything works together
+    1. FeaturePlannerAgent - Proposes features and gets user confirmation
+    2. ArchitectAgent - Designs system architecture
+    3. FilePlannerAgent - Plans all files to generate
+    4. CodeGeneratorAgent - Generates each file
+    5. IntegrationValidatorAgent - Validates everything works together
+    6. TestingAgent - Tests and fixes errors in generated code
     
     Supports ANY problem statement and dynamically determines:
     - Project type (frontend/backend/fullstack/microservices)
@@ -110,11 +114,66 @@ class EnterpriseCodeOrchestrator:
     """
     
     def __init__(self):
+        self.feature_planner = FeaturePlannerAgent()
         self.architect = ArchitectAgent()
         self.file_planner = FilePlannerAgent()
         self.code_generator = CodeGeneratorAgent()
         self.validator = IntegrationValidatorAgent()
+        self.testing_agent = TestingAgent()
         self.gemini = get_gemini_client()
+    
+    async def propose_features(
+        self,
+        problem_statement: str,
+        on_progress: Optional[callable] = None
+    ) -> Dict[str, Any]:
+        """
+        Phase 0: Feature Planning
+        Proposes features for user confirmation before proceeding
+        """
+        if on_progress:
+            await on_progress({
+                "phase": "feature_planning",
+                "message": "💡 Analyzing requirements and proposing features...",
+                "progress": 5
+            })
+        
+        result = await self.feature_planner.propose_features(problem_statement)
+        feature_plan = result.get("feature_plan", {})
+        
+        formatted_features = self.feature_planner.format_features_for_display(feature_plan)
+        
+        if on_progress:
+            await on_progress({
+                "phase": "features_proposed",
+                "message": formatted_features,
+                "progress": 10,
+                "data": {
+                    "feature_plan": feature_plan,
+                    "awaiting_confirmation": True
+                }
+            })
+        
+        return feature_plan
+    
+    async def refine_features(
+        self,
+        feature_plan: Dict[str, Any],
+        user_feedback: str,
+        on_progress: Optional[callable] = None
+    ) -> Dict[str, Any]:
+        """
+        Refine features based on user feedback
+        """
+        if on_progress:
+            await on_progress({
+                "phase": "refining_features",
+                "message": "🔄 Refining features based on your feedback...",
+                "progress": 8
+            })
+        
+        result = await self.feature_planner.refine_features(feature_plan, user_feedback)
+        return result.get("feature_plan", feature_plan)
 
     async def generate_application(
         self,
@@ -281,9 +340,67 @@ class EnterpriseCodeOrchestrator:
             result["files"] = generated_files
             
             # ========================================
-            # PHASE 4: VALIDATION (Optional)
+            # PHASE 4: DEPENDENCY VALIDATION
             # ========================================
-            if len(generated_files) > 3:  # Only validate if we have enough files
+            if on_progress:
+                await on_progress({
+                    "phase": "checking_dependencies",
+                    "message": "🔗 Checking file dependencies...",
+                    "progress": 88
+                })
+            
+            # Check for missing dependencies
+            missing_deps = DependencyValidator.find_missing_dependencies(generated_files)
+            
+            if missing_deps:
+                logger.info("missing_dependencies_found", count=len(missing_deps))
+                
+                # Generate missing files
+                for dep in missing_deps[:10]:  # Limit to avoid too many generations
+                    missing_path = dep.get("resolved_path", "")
+                    
+                    if on_progress:
+                        await on_progress({
+                            "phase": "generating_missing",
+                            "message": f"⚙️ Generating missing: {missing_path}",
+                            "progress": 89
+                        })
+                    
+                    try:
+                        # Create a file spec for the missing file
+                        missing_spec = {
+                            "filepath": missing_path + ".tsx" if not missing_path.endswith((".ts", ".tsx", ".js", ".jsx")) else missing_path,
+                            "filename": os.path.basename(missing_path),
+                            "purpose": f"Missing dependency imported by {dep.get('importing_file', 'unknown')}",
+                            "language": "typescript",
+                            "category": "frontend" if "component" in missing_path.lower() else "shared",
+                            "content_hints": [f"This file is imported by {dep.get('importing_file')}"]
+                        }
+                        
+                        file_result = await self.code_generator.generate_file(
+                            file_spec=missing_spec,
+                            architecture=architecture,
+                            generated_files=generated_files,
+                            problem_statement=problem_statement
+                        )
+                        
+                        generated_files.append(file_result)
+                        
+                        if on_progress:
+                            await on_progress({
+                                "phase": "file_generated",
+                                "message": f"✅ Generated missing: {missing_path}",
+                                "progress": 90,
+                                "data": file_result
+                            })
+                            
+                    except Exception as e:
+                        logger.error("missing_file_generation_error", path=missing_path, error=str(e))
+            
+            # ========================================
+            # PHASE 5: INTEGRATION VALIDATION
+            # ========================================
+            if len(generated_files) > 3:
                 if on_progress:
                     await on_progress({
                         "phase": "validating",
@@ -293,13 +410,16 @@ class EnterpriseCodeOrchestrator:
                 
                 try:
                     validation_result = await self.validator.process_task({
-                        "files": generated_files[:20],  # Limit for token efficiency
+                        "files": generated_files[:20],
                         "architecture": architecture
                     })
                     result["validation"] = validation_result.get("validation")
                 except Exception as e:
                     logger.error("validation_error", error=str(e))
                     result["validation"] = {"valid": True, "issues": []}
+            
+            # Update files in result
+            result["files"] = generated_files
             
             # ========================================
             # COMPLETE
@@ -364,8 +484,8 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "ai-code-generator-enterprise",
-        "version": "3.0.0",
-        "agents": ["architect", "file_planner", "code_generator", "validator"]
+        "version": "4.0.0",
+        "agents": ["feature_planner", "architect", "file_planner", "code_generator", "validator", "testing"]
     }
 
 
@@ -416,22 +536,94 @@ async def process_message_stream(
         # Send started event
         yield f"data: {json.dumps({'type': 'started', 'conversation_id': conv.conversation_id})}\n\n"
         
+        # Check if user is confirming features or providing feedback
+        if conv.phase == ConversationPhase.FEATURES_PROPOSED:
+            # User is responding to feature proposal
+            message_lower = message.lower().strip()
+            
+            if message_lower in ["yes", "ok", "confirm", "proceed", "looks good", "approved", "go ahead", "start"]:
+                # User approved features - proceed to generation
+                conv.phase = ConversationPhase.FEATURES_APPROVED
+                yield f"data: {json.dumps({'type': 'features_approved', 'data': {'message': '✅ Features approved! Starting code generation...'}})}\n\n"
+            else:
+                # User has feedback - refine features
+                yield f"data: {json.dumps({'type': 'phase_change', 'data': {'phase': 'refining_features', 'message': '🔄 Refining features based on your feedback...'}})}\n\n"
+                
+                refined_plan = await orchestrator.refine_features(
+                    conv.feature_plan or {},
+                    message
+                )
+                conv.feature_plan = refined_plan
+                
+                # Send updated features
+                formatted = orchestrator.feature_planner.format_features_for_display(refined_plan)
+                features_data = [
+                    {
+                        "id": str(i),
+                        "title": f.get("name", "Feature"),
+                        "description": f.get("description", ""),
+                        "priority": f.get("priority", "medium")
+                    }
+                    for i, f in enumerate(refined_plan.get("core_features", []))
+                ]
+                
+                yield f"data: {json.dumps({'type': 'features_refined', 'data': {'features': features_data, 'message': formatted, 'awaiting_confirmation': True}})}\n\n"
+                yield f"data: {json.dumps({'type': 'message_end', 'data': {'message': '', 'conversation_id': conv.conversation_id}})}\n\n"
+                return
+        
         # Determine action based on phase
         if conv.phase in [ConversationPhase.INITIAL, ConversationPhase.FEATURES_APPROVED]:
-            # New project or approved - start generation
-            conv.problem_statement = message
+            # Save problem statement
+            if conv.phase == ConversationPhase.INITIAL:
+                conv.problem_statement = message
             
-            # Progress callback for streaming
-            async def on_progress(update: Dict[str, Any]):
-                pass  # Will be handled inline below
+            # ========================================
+            # PHASE 0: FEATURE PLANNING (New!)
+            # ========================================
+            if conv.phase == ConversationPhase.INITIAL:
+                yield f"data: {json.dumps({'type': 'phase_change', 'data': {'phase': 'feature_planning', 'message': '💡 Analyzing requirements and proposing features...'}})}\n\n"
+                
+                feature_result = await orchestrator.feature_planner.propose_features(conv.problem_statement)
+                conv.feature_plan = feature_result
+                
+                # Format features for display
+                formatted = orchestrator.feature_planner.format_features_for_display(feature_result)
+                features_data = [
+                    {
+                        "id": str(i),
+                        "title": f.get("name", "Feature"),
+                        "description": f.get("description", ""),
+                        "priority": f.get("priority", "medium")
+                    }
+                    for i, f in enumerate(feature_result.get("core_features", []))
+                ]
+                
+                yield f"data: {json.dumps({'type': 'features_proposed', 'data': {'features': features_data, 'feature_plan': feature_result, 'message': formatted, 'awaiting_confirmation': True, 'conversation_id': conv.conversation_id}})}\n\n"
+                
+                # Set phase to awaiting feature confirmation
+                conv.phase = ConversationPhase.FEATURES_PROPOSED
+                
+                # Send prompt for user to confirm
+                prompt_message = "\\n\\n---\\n**Please review the proposed features above.**\\n\\n- Type **yes** or **proceed** to start code generation\\n- Or provide feedback to modify the features"
+                yield f"data: {json.dumps({'type': 'awaiting_input', 'data': {'message': prompt_message, 'input_type': 'feature_confirmation'}})}\n\n"
+                yield f"data: {json.dumps({'type': 'message_end', 'data': {'message': '', 'conversation_id': conv.conversation_id}})}\n\n"
+                return
             
             # ========================================
             # PHASE 1: ARCHITECTURE DESIGN
             # ========================================
             yield f"data: {json.dumps({'type': 'phase_change', 'data': {'phase': 'architecture', 'message': '🏗️ Analyzing requirements and designing system architecture...'}})}\n\n"
             
+            # Include confirmed features in the architecture
+            feature_hints = ""
+            if conv.feature_plan:
+                core_features = conv.feature_plan.get("core_features", [])
+                feature_hints = "\n\n## Confirmed Features:\n" + "\n".join([
+                    f"- {f.get('name')}: {f.get('description')}" for f in core_features
+                ])
+            
             arch_result = await orchestrator.architect.process_task({
-                "problem_statement": message,
+                "problem_statement": conv.problem_statement + feature_hints,
                 "constraints": {}
             })
             
@@ -512,6 +704,42 @@ async def process_message_stream(
                     logger.error("file_generation_error", filepath=filepath, error=str(e))
                     continue
             
+            # ========================================
+            # PHASE 4: DEPENDENCY VALIDATION
+            # ========================================
+            yield f"data: {json.dumps({'type': 'phase_change', 'data': {'phase': 'checking_dependencies', 'message': '🔗 Checking file dependencies...'}})}\n\n"
+            
+            missing_deps = DependencyValidator.find_missing_dependencies(generated_files)
+            
+            if missing_deps:
+                yield f"data: {json.dumps({'type': 'phase_change', 'data': {'phase': 'fixing_dependencies', 'message': f'⚠️ Found {len(missing_deps)} missing dependencies. Generating...'}})}\n\n"
+                
+                for dep in missing_deps[:10]:
+                    missing_path = dep.get("resolved_path", "")
+                    
+                    try:
+                        missing_spec = {
+                            "filepath": missing_path + ".tsx" if not missing_path.endswith((".ts", ".tsx", ".js", ".jsx")) else missing_path,
+                            "filename": os.path.basename(missing_path),
+                            "purpose": f"Missing dependency imported by {dep.get('importing_file', 'unknown')}",
+                            "language": "typescript",
+                            "category": "frontend" if "component" in missing_path.lower() else "shared",
+                            "content_hints": [f"This file is imported by {dep.get('importing_file')}"]
+                        }
+                        
+                        file_result = await orchestrator.code_generator.generate_file(
+                            file_spec=missing_spec,
+                            architecture=architecture,
+                            generated_files=generated_files,
+                            problem_statement=conv.problem_statement
+                        )
+                        
+                        generated_files.append(file_result)
+                        yield f"data: {json.dumps({'type': 'file_generated', 'data': file_result})}\n\n"
+                        
+                    except Exception as e:
+                        logger.error("missing_file_generation_error", path=missing_path, error=str(e))
+            
             conv.phase = ConversationPhase.CODE_GENERATED
             
             # Send completion event
@@ -531,7 +759,9 @@ async def process_message_stream(
                 yield f"data: {json.dumps({'type': 'file_generated', 'data': file_data})}\n\n"
                 await asyncio.sleep(0.05)
             
-            yield f"data: {json.dumps({'type': 'code_generated', 'data': {'message': f'🎉 Applied modifications! Generated {len(result.get("files", []))} files.', 'files': result.get('files', [])}})}\n\n"
+            files_count = len(result.get("files", []))
+            success_message = f"🎉 Applied modifications! Generated {files_count} files."
+            yield f"data: {json.dumps({'type': 'code_generated', 'data': {'message': success_message, 'files': result.get('files', [])}})}\n\n"
         
         # Send completion event
         yield f"data: {json.dumps({'type': 'message_end', 'data': {'message': '', 'conversation_id': conv.conversation_id}})}\n\n"
@@ -668,6 +898,48 @@ async def stop_generated_app(request: Request):
         "status": "stopped" if success else "not_found",
         "project_path": project_path
     }
+
+
+@app.post("/api/download")
+async def download_project(request: Request):
+    """
+    Zip and download the generated project.
+    Expects list of files in the request body.
+    """
+    body = await request.json()
+    files = body.get("files", [])
+    
+    if not files:
+        raise HTTPException(status_code=400, detail="No files provided")
+        
+    import io
+    import zipfile
+    
+    # Create a zip file in memory
+    zip_buffer = io.BytesIO()
+    
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+        for file_info in files:
+            filepath = file_info.get("filepath", "")
+            content = file_info.get("content", "")
+            
+            if filepath and content:
+                # Ensure we don't have absolute paths
+                clean_path = filepath.lstrip("/")
+                zip_file.writestr(clean_path, content)
+    
+    # Reset buffer position
+    zip_buffer.seek(0)
+    
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"ai-generated-project-{timestamp}.zip"
+    
+    return StreamingResponse(
+        iter([zip_buffer.getvalue()]),
+        media_type="application/zip",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
 
 
 @app.get("/api/execute/running")
