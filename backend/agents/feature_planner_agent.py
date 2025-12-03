@@ -30,60 +30,47 @@ class FeaturePlannerAgent(BaseAgent):
         )
 
     def get_system_prompt(self) -> str:
-        return """You are a Product Manager and Feature Analyst expert.
+        return """You are a Product Manager expert. Analyze requirements and propose CONCISE feature lists.
 
-Your task is to analyze a problem statement and propose a comprehensive list of features that should be implemented.
+IMPORTANT: Keep responses SHORT. No verbose descriptions. Maximum 5-7 core features, 3-4 optional.
 
-For each feature, provide:
-1. **name**: Short, descriptive name
-2. **description**: What this feature does
-3. **priority**: "must-have", "should-have", or "nice-to-have"
-4. **complexity**: "low", "medium", or "high"
-5. **user_story**: As a [user], I want [feature] so that [benefit]
-6. **acceptance_criteria**: List of criteria to consider the feature complete
-
-## Response Format
+## Response Format (STRICTLY follow this compact format)
 
 ```json
 {
-    "app_name": "Suggested application name",
-    "app_description": "Brief description of the application",
-    "target_users": ["Primary user types"],
+    "app_name": "App Name",
+    "app_description": "One sentence description",
     "core_features": [
         {
             "name": "Feature Name",
-            "description": "What this feature does",
+            "description": "One sentence",
             "priority": "must-have",
-            "complexity": "medium",
-            "user_story": "As a user, I want X so that Y",
-            "acceptance_criteria": [
-                "Criterion 1",
-                "Criterion 2"
-            ],
-            "technical_notes": "Any technical considerations"
+            "complexity": "medium"
         }
     ],
     "optional_features": [
         {
-            "name": "Optional Feature",
-            "description": "Nice-to-have feature",
+            "name": "Feature Name",
+            "description": "One sentence",
             "priority": "nice-to-have",
             "complexity": "low"
         }
     ],
     "tech_recommendations": {
-        "frontend": "Recommended frontend stack",
-        "backend": "Recommended backend stack",
-        "database": "Recommended database",
-        "reasoning": "Why these technologies"
+        "frontend": "React/Next.js",
+        "backend": "Node.js or Python",
+        "database": "PostgreSQL or MongoDB"
     },
     "estimated_files": 15,
     "estimated_complexity": "medium"
 }
 ```
 
-Be thorough but realistic. Focus on features that solve the user's actual problem.
-Prioritize core functionality over bells and whistles.
+RULES:
+- Keep descriptions to ONE sentence max
+- No acceptance_criteria, no user_stories, no technical_notes
+- Maximum 7 core features, 4 optional features
+- Be practical and focused
 """
 
     async def process_task(self, task_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -115,27 +102,16 @@ Prioritize core functionality over bells and whistles.
         activity = await self.start_activity("Analyzing requirements and proposing features")
         
         try:
-            prompt = f"""Analyze this application requirement and propose a comprehensive feature list:
+            prompt = f"""Analyze this requirement and propose a CONCISE feature list:
 
-## Problem Statement
 {problem_statement}
 
-## Instructions
-1. Identify the core problem being solved
-2. List all essential features (must-have)
-3. List recommended features (should-have)
-4. List optional enhancements (nice-to-have)
-5. Provide technical recommendations
-6. Estimate complexity
-
-Be specific and actionable. Each feature should be clearly defined.
-
-Respond with a complete JSON feature plan."""
+Reply with compact JSON. Max 7 core features, 4 optional. One-sentence descriptions only."""
 
             response = await self.call_llm(
                 messages=[{"role": "user", "content": prompt}],
-                temperature=0.4,
-                max_tokens=4000
+                temperature=0.3,
+                max_tokens=8192
             )
             
             feature_plan = self._parse_feature_plan(response)
@@ -166,25 +142,17 @@ Respond with a complete JSON feature plan."""
         try:
             prompt = f"""Refine this feature plan based on user feedback:
 
-## Current Feature Plan
+Current Plan:
 {json.dumps(feature_plan, indent=2)}
 
-## User Feedback
-{user_feedback}
+User Feedback: {user_feedback}
 
-## Instructions
-1. Incorporate the user's suggestions
-2. Add any new features they requested
-3. Remove or modify features they don't want
-4. Keep the same JSON structure
-5. Update priorities if needed
-
-Respond with the updated JSON feature plan."""
+Return updated JSON. Keep it concise. Same structure."""
 
             response = await self.call_llm(
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.3,
-                max_tokens=4000
+                max_tokens=8192
             )
             
             refined_plan = self._parse_feature_plan(response)
@@ -202,7 +170,7 @@ Respond with the updated JSON feature plan."""
             raise
 
     def _parse_feature_plan(self, response: str) -> Dict[str, Any]:
-        """Parse feature plan response"""
+        """Parse feature plan response with truncation recovery"""
         try:
             response = response.strip()
             if response.startswith("```json"):
@@ -215,13 +183,84 @@ Respond with the updated JSON feature plan."""
             
             return json.loads(response)
         except json.JSONDecodeError as e:
-            logger.error("feature_plan_parse_error", error=str(e))
+            logger.warning("feature_plan_parse_error", error=str(e), attempting_recovery=True)
+            
+            recovered = self._attempt_json_recovery(response)
+            if recovered:
+                return recovered
+            
             return {
                 "app_name": "Application",
                 "core_features": [],
                 "optional_features": [],
                 "error": str(e)
             }
+    
+    def _attempt_json_recovery(self, truncated: str) -> Optional[Dict[str, Any]]:
+        """Attempt to recover partial JSON from truncated response"""
+        import re
+        
+        try:
+            app_name_match = re.search(r'"app_name"\s*:\s*"([^"]+)"', truncated)
+            app_desc_match = re.search(r'"app_description"\s*:\s*"([^"]+)"', truncated)
+            
+            core_features = []
+            feature_pattern = re.compile(
+                r'\{\s*"name"\s*:\s*"([^"]+)"\s*,\s*"description"\s*:\s*"([^"]+)"\s*,\s*"priority"\s*:\s*"([^"]+)"\s*,\s*"complexity"\s*:\s*"([^"]+)"',
+                re.DOTALL
+            )
+            
+            core_section = re.search(r'"core_features"\s*:\s*\[(.*?)(?:\]|"optional_features")', truncated, re.DOTALL)
+            if core_section:
+                for match in feature_pattern.finditer(core_section.group(1)):
+                    core_features.append({
+                        "name": match.group(1),
+                        "description": match.group(2),
+                        "priority": match.group(3),
+                        "complexity": match.group(4)
+                    })
+            
+            optional_features = []
+            optional_section = re.search(r'"optional_features"\s*:\s*\[(.*?)(?:\]|"tech_recommendations")', truncated, re.DOTALL)
+            if optional_section:
+                for match in feature_pattern.finditer(optional_section.group(1)):
+                    optional_features.append({
+                        "name": match.group(1),
+                        "description": match.group(2),
+                        "priority": match.group(3),
+                        "complexity": match.group(4)
+                    })
+            
+            tech_match = re.search(
+                r'"tech_recommendations"\s*:\s*\{\s*"frontend"\s*:\s*"([^"]+)"\s*,\s*"backend"\s*:\s*"([^"]+)"\s*,\s*"database"\s*:\s*"([^"]+)"',
+                truncated
+            )
+            
+            files_match = re.search(r'"estimated_files"\s*:\s*(\d+)', truncated)
+            complexity_match = re.search(r'"estimated_complexity"\s*:\s*"([^"]+)"', truncated)
+            
+            if core_features:
+                logger.info("json_recovery_success", features_recovered=len(core_features))
+                return {
+                    "app_name": app_name_match.group(1) if app_name_match else "Application",
+                    "app_description": app_desc_match.group(1) if app_desc_match else "",
+                    "core_features": core_features,
+                    "optional_features": optional_features,
+                    "tech_recommendations": {
+                        "frontend": tech_match.group(1) if tech_match else "React",
+                        "backend": tech_match.group(2) if tech_match else "Node.js",
+                        "database": tech_match.group(3) if tech_match else "PostgreSQL"
+                    } if tech_match else {},
+                    "estimated_files": int(files_match.group(1)) if files_match else 15,
+                    "estimated_complexity": complexity_match.group(1) if complexity_match else "medium",
+                    "recovered": True
+                }
+            
+            return None
+            
+        except Exception as e:
+            logger.error("json_recovery_failed", error=str(e))
+            return None
 
     def format_features_for_display(self, feature_plan: Dict[str, Any]) -> str:
         """Format feature plan for user-friendly display"""

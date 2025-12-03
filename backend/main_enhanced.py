@@ -541,7 +541,16 @@ async def process_message_stream(
             # User is responding to feature proposal
             message_lower = message.lower().strip()
             
-            if message_lower in ["yes", "ok", "confirm", "proceed", "looks good", "approved", "go ahead", "start"]:
+            # Check for approval - be flexible with phrasing
+            approval_keywords = [
+                "yes", "ok", "okay", "confirm", "proceed", "good", "approved", "approve", 
+                "go ahead", "start", "fine", "perfect", "great", "continue", "generate", 
+                "build", "create", "implement", "do it", "make it", "let's go", "sounds good",
+                "that's good", "that works", "looks great", "ship it", "execute", "run"
+            ]
+            is_approval = any(keyword in message_lower for keyword in approval_keywords)
+            
+            if is_approval:
                 # User approved features - proceed to generation
                 conv.phase = ConversationPhase.FEATURES_APPROVED
                 yield f"data: {json.dumps({'type': 'features_approved', 'data': {'message': '✅ Features approved! Starting code generation...'}})}\n\n"
@@ -549,11 +558,14 @@ async def process_message_stream(
                 # User has feedback - refine features
                 yield f"data: {json.dumps({'type': 'phase_change', 'data': {'phase': 'refining_features', 'message': '🔄 Refining features based on your feedback...'}})}\n\n"
                 
-                refined_plan = await orchestrator.refine_features(
+                refined_result = await orchestrator.refine_features(
                     conv.feature_plan or {},
                     message
                 )
-                conv.feature_plan = refined_plan
+                conv.feature_plan = refined_result
+                
+                # Extract the actual feature plan
+                refined_plan = refined_result.get("feature_plan", refined_result)
                 
                 # Send updated features
                 formatted = orchestrator.feature_planner.format_features_for_display(refined_plan)
@@ -586,8 +598,11 @@ async def process_message_stream(
                 feature_result = await orchestrator.feature_planner.propose_features(conv.problem_statement)
                 conv.feature_plan = feature_result
                 
+                # Extract the actual feature plan from the result
+                actual_plan = feature_result.get("feature_plan", {})
+                
                 # Format features for display
-                formatted = orchestrator.feature_planner.format_features_for_display(feature_result)
+                formatted = orchestrator.feature_planner.format_features_for_display(actual_plan)
                 features_data = [
                     {
                         "id": str(i),
@@ -595,10 +610,10 @@ async def process_message_stream(
                         "description": f.get("description", ""),
                         "priority": f.get("priority", "medium")
                     }
-                    for i, f in enumerate(feature_result.get("core_features", []))
+                    for i, f in enumerate(actual_plan.get("core_features", []))
                 ]
                 
-                yield f"data: {json.dumps({'type': 'features_proposed', 'data': {'features': features_data, 'feature_plan': feature_result, 'message': formatted, 'awaiting_confirmation': True, 'conversation_id': conv.conversation_id}})}\n\n"
+                yield f"data: {json.dumps({'type': 'features_proposed', 'data': {'features': features_data, 'feature_plan': actual_plan, 'message': formatted, 'awaiting_confirmation': True, 'conversation_id': conv.conversation_id}})}\n\n"
                 
                 # Set phase to awaiting feature confirmation
                 conv.phase = ConversationPhase.FEATURES_PROPOSED
@@ -681,10 +696,19 @@ async def process_message_stream(
             
             generated_files = []
             
+            # Limit files to prevent rate limiting (max 35 files)
+            max_files = 35
+            if len(files_to_generate) > max_files:
+                logger.warning("file_count_limited", original=len(files_to_generate), limited=max_files)
+                files_to_generate = files_to_generate[:max_files]
+                yield f"data: {json.dumps({'type': 'warning', 'data': {'message': f'⚠️ Limiting to {max_files} essential files to avoid rate limits'}})}\n\n"
+            
             for i, file_spec in enumerate(files_to_generate):
                 filepath = file_spec.get("filepath", f"file_{i}")
                 
                 try:
+                    logger.info("generating_file", index=i+1, total=len(files_to_generate), filepath=filepath)
+                    
                     file_result = await orchestrator.code_generator.generate_file(
                         file_spec=file_spec,
                         architecture=architecture,
@@ -697,11 +721,18 @@ async def process_message_stream(
                     # Stream file generation event
                     yield f"data: {json.dumps({'type': 'file_generated', 'data': file_result})}\n\n"
                     
-                    # Small delay for better UX
-                    await asyncio.sleep(0.05)
+                    # Small delay to avoid rate limiting
+                    await asyncio.sleep(0.1)
                     
                 except Exception as e:
-                    logger.error("file_generation_error", filepath=filepath, error=str(e))
+                    error_msg = str(e)
+                    logger.error("file_generation_error", filepath=filepath, error=error_msg, index=i+1)
+                    yield f"data: {json.dumps({'type': 'file_error', 'data': {'filepath': filepath, 'error': error_msg}})}\n\n"
+                    
+                    # If we get a rate limit error, wait longer
+                    if "rate" in error_msg.lower() or "429" in error_msg or "quota" in error_msg.lower():
+                        logger.warning("rate_limit_detected", waiting=5)
+                        await asyncio.sleep(5)
                     continue
             
             # ========================================
@@ -767,8 +798,11 @@ async def process_message_stream(
         yield f"data: {json.dumps({'type': 'message_end', 'data': {'message': '', 'conversation_id': conv.conversation_id}})}\n\n"
         
     except Exception as e:
-        logger.error("stream_processing_error", error=str(e))
-        yield f"data: {json.dumps({'type': 'error', 'data': {'error': str(e)}})}\n\n"
+        import traceback
+        error_traceback = traceback.format_exc()
+        logger.error("stream_processing_error", error=str(e), traceback=error_traceback)
+        yield f"data: {json.dumps({'type': 'error', 'data': {'error': str(e), 'details': 'Check server logs for details'}})}\n\n"
+        yield f"data: {json.dumps({'type': 'message_end', 'data': {'message': '', 'conversation_id': conv.conversation_id if conv else 'unknown'}})}\n\n"
 
 
 @app.post("/api/v1/generate")

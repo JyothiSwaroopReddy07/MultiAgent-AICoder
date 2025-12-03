@@ -76,51 +76,73 @@ class BaseAgent(ABC):
         messages: List[Dict[str, str]],
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
-        system_prompt: Optional[str] = None
+        system_prompt: Optional[str] = None,
+        max_retries: int = 3
     ) -> str:
         """
-        Call the LLM (Gemini) with messages.
+        Call the LLM (Gemini) with messages and retry logic.
         
         Args:
             messages: List of message dicts with 'role' and 'content'
             temperature: Optional temperature override
             max_tokens: Optional max tokens override
             system_prompt: Optional system prompt override
+            max_retries: Maximum number of retry attempts
             
         Returns:
             LLM response content string
         """
-        try:
-            # Use provided system prompt or get from agent
-            sys_prompt = system_prompt or self.get_system_prompt()
-            
-            # Call Gemini client
-            response = await self.gemini_client.chat_completion(
-                messages=messages,
-                system_prompt=sys_prompt,
-                temperature=temperature,
-                max_tokens=max_tokens
-            )
-            
-            # Track usage if activity is active
-            if self.current_activity:
-                self.current_activity.llm_usage = LLMUsage(
-                    model=response.get("model", "gemini-2.5-flash"),
-                    prompt_tokens=response.get("usage", {}).get("prompt_tokens", 0),
-                    completion_tokens=response.get("usage", {}).get("completion_tokens", 0),
-                    total_tokens=response.get("usage", {}).get("total_tokens", 0),
-                    cost=response.get("usage", {}).get("cost", 0.0)
+        import asyncio
+        
+        sys_prompt = system_prompt or self.get_system_prompt()
+        last_error = None
+        
+        for attempt in range(max_retries):
+            try:
+                response = await self.gemini_client.chat_completion(
+                    messages=messages,
+                    system_prompt=sys_prompt,
+                    temperature=temperature,
+                    max_tokens=max_tokens
                 )
-            
-            return response.get("content", "")
-            
-        except Exception as e:
-            logger.error(
-                "llm_call_failed",
-                agent=self.role.value,
-                error=str(e)
-            )
-            raise
+                
+                content = response.get("content", "")
+                
+                if not content or content.strip() == "":
+                    raise ValueError("Empty response from LLM")
+                
+                if self.current_activity:
+                    self.current_activity.llm_usage = LLMUsage(
+                        model=response.get("model", "gemini-2.5-flash"),
+                        prompt_tokens=response.get("usage", {}).get("prompt_tokens", 0),
+                        completion_tokens=response.get("usage", {}).get("completion_tokens", 0),
+                        total_tokens=response.get("usage", {}).get("total_tokens", 0),
+                        cost=response.get("usage", {}).get("cost", 0.0)
+                    )
+                
+                return content
+                
+            except Exception as e:
+                last_error = e
+                wait_time = (2 ** attempt) + 1
+                logger.warning(
+                    "llm_call_retry",
+                    agent=self.role.value,
+                    attempt=attempt + 1,
+                    max_retries=max_retries,
+                    error=str(e),
+                    wait_time=wait_time
+                )
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(wait_time)
+        
+        logger.error(
+            "llm_call_failed_after_retries",
+            agent=self.role.value,
+            error=str(last_error),
+            attempts=max_retries
+        )
+        raise last_error
 
     async def start_activity(self, action: str) -> AgentActivity:
         """
