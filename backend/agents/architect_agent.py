@@ -32,193 +32,25 @@ class ArchitectAgent(BaseAgent):
         )
 
     def get_system_prompt(self) -> str:
-        return """You are a Principal Software Architect with 20+ years of experience designing enterprise systems.
+        return """You are a Software Architect. Return JSON only, no markdown.
 
-Your role is to analyze ANY software requirement and produce a COMPLETE, DETAILED system architecture.
-
-**CRITICAL: You must analyze the problem deeply and determine the optimal architecture.**
-
-## Analysis Framework
-
-### Step 1: Understand the Problem Domain
-- What type of application is this? (Web app, API, CLI, Mobile, Desktop, etc.)
-- Who are the users? (Consumers, Businesses, Developers, Internal teams)
-- What is the scale? (Personal project, Startup MVP, Enterprise system)
-- What are the core features?
-
-### Step 2: Determine Project Type
-Based on analysis, choose the most appropriate:
-- **frontend_only**: Pure frontend (React, Vue, Angular) - no backend needed
-- **backend_only**: API/service only (FastAPI, Express, Django) - no UI
-- **fullstack_monolith**: Single codebase with both frontend and backend
-- **fullstack_separated**: Separate frontend and backend projects
-- **microservices**: Multiple independent services
-- **serverless**: Cloud functions based architecture
-- **mobile**: Mobile application (React Native, Flutter)
-- **desktop**: Desktop application (Electron, Tauri)
-
-### Step 3: Design Folder Structure
-Create a COMPLETE folder structure with ALL necessary files. Consider:
-- Source code organization
-- Configuration files
-- Test files
-- Documentation
-- CI/CD files
-- Docker/deployment files
-- Database migrations
-- Static assets
-
-### Step 4: Define All Required Files
-List EVERY file needed for a production-ready application:
-- Entry points
-- Components/modules
-- Services/utils
-- Types/interfaces
-- Config files
-- Environment files
-- Documentation
-- Tests
-
-### Step 5: Technology Stack
-Choose appropriate technologies:
-- Programming language(s)
-- Frameworks
-- Databases
-- Caching
-- Message queues
-- Authentication
-- Deployment platform
-
-## Response Format
-
-You MUST respond with valid JSON:
-
-```json
+Response format:
 {
-    "analysis": {
-        "problem_summary": "Clear summary of what needs to be built",
-        "problem_type": "web_app|api|cli|mobile|desktop|library|microservices",
-        "complexity": "simple|moderate|complex|enterprise",
-        "estimated_files": 25,
-        "estimated_development_time": "2 weeks",
-        "key_challenges": ["challenge1", "challenge2"]
-    },
-    "architecture": {
-        "project_type": "fullstack_monolith|fullstack_separated|frontend_only|backend_only|microservices",
-        "pattern": "MVC|Clean Architecture|Hexagonal|Microservices|Serverless",
-        "description": "Detailed architecture description"
-    },
-    "tech_stack": {
-        "frontend": {
-            "framework": "Next.js 14|React|Vue|Angular|None",
-            "language": "TypeScript|JavaScript",
-            "styling": "Tailwind CSS|CSS Modules|Styled Components",
-            "state_management": "React Context|Redux|Zustand|None"
-        },
-        "backend": {
-            "framework": "FastAPI|Express|Django|NestJS|None",
-            "language": "Python|TypeScript|Go|Java",
-            "api_style": "REST|GraphQL|gRPC"
-        },
-        "database": {
-            "primary": "PostgreSQL|MongoDB|MySQL|SQLite|None",
-            "orm": "Prisma|TypeORM|SQLAlchemy|Mongoose",
-            "caching": "Redis|Memcached|None"
-        },
-        "infrastructure": {
-            "containerization": "Docker|None",
-            "orchestration": "Docker Compose|Kubernetes|None",
-            "ci_cd": "GitHub Actions|GitLab CI|None"
-        }
-    },
-    "folder_structure": {
-        "root": "project-name",
-        "directories": [
-            {
-                "path": "src",
-                "purpose": "Source code",
-                "subdirectories": [
-                    {"path": "src/components", "purpose": "React components"},
-                    {"path": "src/services", "purpose": "Business logic"}
-                ]
-            }
-        ]
-    },
-    "files": [
-        {
-            "filepath": "package.json",
-            "filename": "package.json",
-            "purpose": "Project dependencies and scripts",
-            "language": "json",
-            "priority": 1,
-            "dependencies": [],
-            "category": "config"
-        },
-        {
-            "filepath": "src/app/page.tsx",
-            "filename": "page.tsx",
-            "purpose": "Main page component",
-            "language": "typescript",
-            "priority": 2,
-            "dependencies": ["package.json", "src/app/layout.tsx"],
-            "category": "frontend"
-        }
-    ],
-    "database_schema": {
-        "entities": [
-            {
-                "name": "User",
-                "fields": [
-                    {"name": "id", "type": "uuid", "primary": true},
-                    {"name": "email", "type": "string", "unique": true},
-                    {"name": "password", "type": "string", "hashed": true}
-                ],
-                "relationships": []
-            }
-        ]
-    },
-    "api_design": {
-        "base_url": "/api/v1",
-        "endpoints": [
-            {
-                "method": "GET",
-                "path": "/users",
-                "description": "List all users",
-                "auth_required": true,
-                "request_body": null,
-                "response": {"type": "array", "items": "User"}
-            }
-        ]
-    },
-    "features": [
-        {
-            "id": "f1",
-            "name": "User Authentication",
-            "description": "Complete auth system with login, register, forgot password",
-            "priority": "high",
-            "files_involved": ["src/auth/*", "src/api/auth/*"]
-        }
-    ],
-    "deployment": {
-        "recommended_platform": "Vercel|AWS|GCP|Azure|DigitalOcean",
-        "environment_variables": [
-            {"name": "DATABASE_URL", "description": "Database connection string", "required": true},
-            {"name": "JWT_SECRET", "description": "JWT signing secret", "required": true}
-        ]
-    }
+  "analysis": {"problem_summary": "...", "complexity": "simple|moderate|complex", "estimated_files": 20},
+  "architecture": {"project_type": "fullstack_monolith", "pattern": "MVC"},
+  "tech_stack": {
+    "frontend": {"framework": "Next.js 14", "language": "TypeScript", "styling": "Tailwind CSS"},
+    "backend": {"framework": "Next.js API Routes", "language": "TypeScript"},
+    "database": {"primary": "PostgreSQL", "orm": "Prisma"}
+  },
+  "files": [
+    {"filepath": "package.json", "filename": "package.json", "purpose": "Dependencies", "language": "json", "category": "config"},
+    {"filepath": "src/app/page.tsx", "filename": "page.tsx", "purpose": "Home page", "language": "typescript", "category": "frontend"}
+  ],
+  "features": [{"id": "f1", "name": "Feature", "description": "...", "priority": "high"}]
 }
-```
 
-## Guidelines
-
-1. **Be Comprehensive**: Include ALL files needed for production
-2. **Be Specific**: Don't use placeholders like "etc." - list everything
-3. **Be Practical**: Choose technologies that work well together
-4. **Be Scalable**: Design for growth but don't over-engineer
-5. **Be Modern**: Use current best practices and frameworks
-6. **Be Complete**: Include tests, docs, CI/CD, Docker files
-
-For complex projects, you may need 50-100+ files. That's expected for enterprise applications.
+Rules: Use Next.js 14 + TypeScript + Tailwind + Prisma for web apps. List 15-30 files. Include filename for each file.
 """
 
     async def process_task(self, task_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -602,17 +434,18 @@ For **Next.js** projects, ALWAYS include:
 - postcss.config.js (if using Tailwind)
 - tailwind.config.js or tailwind.config.ts (if using Tailwind)
 
+## IMPORTANT: Limit to 25-35 files maximum to avoid rate limits.
+
 ## Response Format
 
 ```json
 {
-    "total_files": 45,
+    "total_files": 30,
     "files_by_category": {
-        "config": 8,
-        "frontend": 15,
-        "backend": 10,
-        "shared": 5,
-        "test": 5,
+        "config": 6,
+        "frontend": 10,
+        "backend": 8,
+        "shared": 4,
         "docs": 2
     },
     "generation_order": [
@@ -641,7 +474,8 @@ For **Next.js** projects, ALWAYS include:
 }
 ```
 
-Be thorough - missing files will cause the project to fail!
+Focus on essential files only. Limit to 25-35 files maximum.
+Skip test files unless specifically requested. Missing files can be added later.
 """
 
     async def process_task(self, task_data: Dict[str, Any]) -> Dict[str, Any]:

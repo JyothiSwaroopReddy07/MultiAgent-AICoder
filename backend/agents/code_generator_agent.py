@@ -126,9 +126,13 @@ REMEMBER: ZERO COMMENTS IN THE CODE. The code should be self-explanatory through
             
             await self.complete_activity("completed")
             
+            # Extract filename from filepath if not provided
+            filepath = file_spec.get("filepath", "")
+            filename = file_spec.get("filename") or filepath.split("/")[-1] if filepath else "unknown"
+            
             return {
-                "filepath": file_spec.get("filepath"),
-                "filename": file_spec.get("filename"),
+                "filepath": filepath,
+                "filename": filename,
                 "content": content,
                 "language": file_spec.get("language", "text"),
                 "description": file_spec.get("purpose", ""),

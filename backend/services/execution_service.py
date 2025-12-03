@@ -233,15 +233,17 @@ async def execute_node_project(
         return
     
     # Determine start command based on project type
+    # Use -H 0.0.0.0 to bind to all interfaces (needed for Docker)
     if project_type == "nextjs":
-        cmd = ["npm", "run", "dev", "--", "-p", str(port)]
+        cmd = ["npm", "run", "dev", "--", "-H", "0.0.0.0", "-p", str(port)]
     elif project_type == "cra":
         cmd = ["npm", "start"]
         env = os.environ.copy()
         env["PORT"] = str(port)
+        env["HOST"] = "0.0.0.0"
         env["BROWSER"] = "none"
     else:
-        cmd = ["npm", "run", "dev", "--", "--port", str(port)]
+        cmd = ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", str(port)]
     
     yield {
         "type": "log",
@@ -252,6 +254,8 @@ async def execute_node_project(
     try:
         env = os.environ.copy()
         env["PORT"] = str(port)
+        env["HOST"] = "0.0.0.0"
+        env["HOSTNAME"] = "0.0.0.0"
         env["BROWSER"] = "none"
         
         process = subprocess.Popen(
