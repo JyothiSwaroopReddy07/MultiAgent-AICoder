@@ -125,12 +125,25 @@ class BaseAgent(ABC):
             except Exception as e:
                 last_error = e
                 wait_time = (2 ** attempt) + 1
+                error_msg = str(e)
+                error_type = type(e).__name__
+
+                # Console logging for debugging
+                print(f"\n⚠️  LLM Call Failed (Attempt {attempt + 1}/{max_retries})")
+                print(f"   Agent: {self.role.value}")
+                print(f"   Error Type: {error_type}")
+                print(f"   Error: {error_msg[:200]}")
+                if "rate" in error_msg.lower() or "429" in error_msg or "quota" in error_msg.lower():
+                    print(f"   ⚠️  RATE LIMIT/QUOTA ISSUE DETECTED")
+                print(f"   Retrying in {wait_time}s...\n")
+
                 logger.warning(
                     "llm_call_retry",
                     agent=self.role.value,
                     attempt=attempt + 1,
                     max_retries=max_retries,
-                    error=str(e),
+                    error=error_msg,
+                    error_type=error_type,
                     wait_time=wait_time
                 )
                 if attempt < max_retries - 1:

@@ -906,20 +906,26 @@ function ChatApp() {
                 Features ({proposedFeatures.length})
               </h4>
               <div className="space-y-1.5">
-                {proposedFeatures.map(feat => (
-                  <div key={feat.id} className="text-xs p-2 bg-gray-700/30 rounded">
-                    <div className="flex items-start gap-2">
-                      <span className={`mt-0.5 ${
-                        feat.priority === 'high' ? 'text-red-400' :
-                        feat.priority === 'medium' ? 'text-yellow-400' :
-                        'text-gray-400'
-                      }`}>•</span>
-                      <div className="flex-1">
-                        <div className="font-medium text-gray-200">{feat.title}</div>
+                {proposedFeatures.map(feat => {
+                  // Check if any generated files relate to this feature (simple heuristic)
+                  const isImplemented = codeFiles.some(file =>
+                    file.filepath.toLowerCase().includes(feat.title.toLowerCase().split(' ')[0]) ||
+                    file.content.toLowerCase().includes(feat.title.toLowerCase())
+                  );
+
+                  return (
+                    <div key={feat.id} className="text-xs p-2 bg-gray-700/30 rounded">
+                      <div className="flex items-start gap-2">
+                        <span className={`mt-0.5 transition-colors ${
+                          isImplemented ? 'text-emerald-400' : 'text-red-400'
+                        }`}>•</span>
+                        <div className="flex-1">
+                          <div className="font-medium text-gray-200">{feat.title}</div>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
