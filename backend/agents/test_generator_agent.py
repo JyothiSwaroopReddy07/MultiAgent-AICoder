@@ -217,11 +217,6 @@ Start directly with import statements.
                 updated_files.append(f)
         
         return updated_files
-            
-        except Exception as e:
-            await self.complete_activity("failed")
-            logger.error("unit_test_generation_failed", agent=self.agent_name, error=str(e))
-            raise
 
     def _get_testable_files(self, files: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Get files that should have unit tests"""
