@@ -1002,21 +1002,11 @@ function ChatApp() {
       <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 z-50 animate-bounce-in flex gap-4">
         <button
           onClick={executeApplication}
-          disabled={appExecution.status === 'starting'}
           className="btn-execute pulse-green flex items-center gap-3 shadow-lg shadow-emerald-500/20"
         >
-          {appExecution.status === 'starting' ? (
-            <>
-              <Loader2 className="animate-spin" size={20} />
-              <span>Starting Application...</span>
-            </>
-          ) : (
-            <>
-              <Rocket size={20} />
-              <span>Execute Application</span>
-              <Zap size={16} className="text-yellow-300" />
-            </>
-          )}
+          <Rocket size={20} />
+          <span>Execute Application</span>
+          <Zap size={16} className="text-yellow-300" />
         </button>
         
         <button
