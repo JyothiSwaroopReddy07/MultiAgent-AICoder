@@ -28,12 +28,32 @@ from agents.architect_agent import ArchitectAgent, FilePlannerAgent
 from agents.code_generator_agent import CodeGeneratorAgent, IntegrationValidatorAgent
 from agents.feature_planner_agent import FeaturePlannerAgent
 from agents.testing_agent import TestingAgent, DependencyValidator
+from agents.test_generator_agent import TestGeneratorAgent, TestReportAgent
+from agents.code_reviewer_agent import CodeReviewerAgent
+from agents.execution_agent import ExecutionAgent
 from utils.gemini_client import get_gemini_client
 from utils.llm_tracker import tracker
+
+SYMPTOM_TRACKER_PRESET = """A software application that allows users to track and monitor their symptoms over time, enabling them to identify patterns and potential triggers. Users can log symptoms, severity, duration, and associated factors such as food, stress, or environment to gain insights into their health and make informed decisions.
+
+## Functional Requirements:
+1. User Authentication - Register and login functionality
+2. Symptom Logging - Log symptoms with severity (1-10), duration, date/time
+3. Associated Factors - Track food, stress levels, sleep, weather, medications
+4. Pattern Analysis - Visualize symptom trends over time with charts
+5. Trigger Detection - Identify correlations between factors and symptoms
+6. Symptom History - View and search past symptom entries
+7. Export Data - Download symptom data as CSV/PDF
+8. Reminders - Set reminders to log symptoms
+9. Dashboard - Overview of recent symptoms and insights
+10. Notes - Add detailed notes to symptom entries"""
 from services.execution_service import (
     execute_application, stop_application, 
     get_running_applications, cleanup_all_applications
 )
+
+# Global execution agent instance
+execution_agent = ExecutionAgent()
 
 # Configure structured logging
 structlog.configure(
@@ -85,6 +105,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["Content-Disposition", "Content-Type", "Content-Length"],
 )
 
 
@@ -94,15 +115,21 @@ app.add_middleware(
 
 class EnterpriseCodeOrchestrator:
     """
-    Enterprise-grade code generation orchestrator.
+    Enterprise-grade code generation orchestrator with Multi-Agent System.
     
-    Uses multiple specialized agents:
+    Uses multiple specialized agents with MCP (Model Context Protocol) integration:
     1. FeaturePlannerAgent - Proposes features and gets user confirmation
     2. ArchitectAgent - Designs system architecture
     3. FilePlannerAgent - Plans all files to generate
     4. CodeGeneratorAgent - Generates each file
     5. IntegrationValidatorAgent - Validates everything works together
     6. TestingAgent - Tests and fixes errors in generated code
+    7. TestGeneratorAgent - Generates comprehensive test cases
+    
+    Agent Communication Pattern:
+    - Agents communicate via MCP for coordinated code generation
+    - Each agent tracks its own LLM usage for transparency
+    - Sequential pipeline with parallel file generation
     
     Supports ANY problem statement and dynamically determines:
     - Project type (frontend/backend/fullstack/microservices)
@@ -111,6 +138,7 @@ class EnterpriseCodeOrchestrator:
     - Database design
     - API design
     - All required files (could be 10 or 100+)
+    - Comprehensive test suite
     """
     
     def __init__(self):
@@ -118,9 +146,24 @@ class EnterpriseCodeOrchestrator:
         self.architect = ArchitectAgent()
         self.file_planner = FilePlannerAgent()
         self.code_generator = CodeGeneratorAgent()
+        self.code_reviewer = CodeReviewerAgent()
         self.validator = IntegrationValidatorAgent()
         self.testing_agent = TestingAgent()
+        self.test_generator = TestGeneratorAgent()
+        self.test_reporter = TestReportAgent()
         self.gemini = get_gemini_client()
+        
+        self.agents = {
+            "feature_planner": self.feature_planner,
+            "architect": self.architect,
+            "file_planner": self.file_planner,
+            "code_generator": self.code_generator,
+            "code_reviewer": self.code_reviewer,
+            "validator": self.validator,
+            "testing_agent": self.testing_agent,
+            "test_generator": self.test_generator,
+            "test_reporter": self.test_reporter
+        }
     
     async def propose_features(
         self,
@@ -405,7 +448,7 @@ class EnterpriseCodeOrchestrator:
                     await on_progress({
                         "phase": "validating",
                         "message": "🔍 Validating integration...",
-                        "progress": 92
+                        "progress": 88
                     })
                 
                 try:
@@ -417,6 +460,92 @@ class EnterpriseCodeOrchestrator:
                 except Exception as e:
                     logger.error("validation_error", error=str(e))
                     result["validation"] = {"valid": True, "issues": []}
+            
+            # ========================================
+            # PHASE 6: CODE REVIEW
+            # ========================================
+            if on_progress:
+                await on_progress({
+                    "phase": "reviewing_code",
+                    "message": "🔍 Reviewing code for syntax errors...",
+                    "progress": 90
+                })
+            
+            try:
+                review_result = await self.code_reviewer.review_and_fix_files(
+                    files=generated_files,
+                    architecture=architecture
+                )
+                
+                generated_files = review_result.get("files", generated_files)
+                review_summary = review_result.get("review_summary", {})
+                
+                if review_summary.get("files_fixed", 0) > 0:
+                    if on_progress:
+                        await on_progress({
+                            "phase": "code_fixed",
+                            "message": f"✅ Fixed syntax errors in {review_summary['files_fixed']} files",
+                            "progress": 92,
+                            "data": review_summary
+                        })
+                    logger.info("code_review_fixes_applied", **review_summary)
+                else:
+                    if on_progress:
+                        await on_progress({
+                            "phase": "code_reviewed",
+                            "message": "✅ Code review passed - no syntax errors",
+                            "progress": 92
+                        })
+                
+                result["review_summary"] = review_summary
+                
+            except Exception as e:
+                logger.error("code_review_error", error=str(e))
+                result["review_summary"] = {"error": str(e)}
+            
+            # ========================================
+            # PHASE 7: UNIT TEST GENERATION
+            # ========================================
+            if on_progress:
+                await on_progress({
+                    "phase": "generating_tests",
+                    "message": "🧪 Generating unit tests for each file...",
+                    "progress": 94
+                })
+            
+            try:
+                test_result = await self.test_generator.generate_tests(
+                    generated_files=generated_files,
+                    architecture=architecture,
+                    problem_statement=problem_statement
+                )
+                
+                test_files = test_result.get("test_files", [])
+                config_files = test_result.get("config_files", [])
+                
+                for tf in test_files:
+                    generated_files.append(tf)
+                
+                for cf in config_files:
+                    if not any(f.get("filepath") == cf.get("filepath") for f in generated_files):
+                        generated_files.append(cf)
+                
+                result["test_summary"] = test_result.get("summary", {})
+                
+                if on_progress:
+                    test_count = len(test_files)
+                    await on_progress({
+                        "phase": "tests_generated",
+                        "message": f"✅ Generated {test_count} unit test files",
+                        "progress": 96,
+                        "data": {"test_files": test_count}
+                    })
+                
+                logger.info("unit_test_generation_complete", test_files=len(test_files))
+                
+            except Exception as e:
+                logger.error("unit_test_generation_error", error=str(e))
+                result["test_summary"] = {"error": str(e)}
             
             # Update files in result
             result["files"] = generated_files
@@ -627,25 +756,62 @@ async def process_message_stream(
             # ========================================
             # PHASE 1: ARCHITECTURE DESIGN
             # ========================================
-            yield f"data: {json.dumps({'type': 'phase_change', 'data': {'phase': 'architecture', 'message': '🏗️ Analyzing requirements and designing system architecture...'}})}\n\n"
+            yield f"data: {json.dumps({'type': 'phase_change', 'data': {'phase': 'architecture', 'message': '🏗️ Designing system architecture with feature implementations...'}})}\n\n"
             
-            # Include confirmed features in the architecture
+            # Include confirmed features in the architecture - CRITICAL for feature implementation
             feature_hints = ""
+            confirmed_features = []
             if conv.feature_plan:
                 core_features = conv.feature_plan.get("core_features", [])
-                feature_hints = "\n\n## Confirmed Features:\n" + "\n".join([
-                    f"- {f.get('name')}: {f.get('description')}" for f in core_features
-                ])
+                optional_features = conv.feature_plan.get("optional_features", [])
+                
+                # Include core features with priority high
+                for i, f in enumerate(core_features):
+                    confirmed_features.append({
+                        "id": f"f{i+1}",
+                        "name": f.get("name", f"Feature {i+1}"),
+                        "description": f.get("description", ""),
+                        "priority": "high"
+                    })
+                
+                # Include some optional features with medium priority
+                for i, f in enumerate(optional_features[:3]):  # Limit optional features
+                    confirmed_features.append({
+                        "id": f"o{i+1}",
+                        "name": f.get("name", f"Optional {i+1}"),
+                        "description": f.get("description", ""),
+                        "priority": "medium"
+                    })
+                
+                feature_hints = "\n\n## CONFIRMED FEATURES TO IMPLEMENT:\n"
+                for f in confirmed_features:
+                    feature_hints += f"- **{f['name']}** [{f['priority']}]: {f['description']}\n"
+                
+                feature_hints += "\n\nYou MUST generate implementation files for EACH of these features:\n"
+                feature_hints += "- Page/route for each feature\n"
+                feature_hints += "- Form and List components for each feature\n"
+                feature_hints += "- API routes for each feature\n"
+                feature_hints += "- Hooks/services for each feature\n"
             
             arch_result = await orchestrator.architect.process_task({
                 "problem_statement": conv.problem_statement + feature_hints,
-                "constraints": {}
+                "constraints": {"confirmed_features": confirmed_features}
             })
             
             architecture = arch_result.get("architecture", {})
             analysis = architecture.get("analysis", {})
             arch_info = architecture.get("architecture", {})
             tech_stack = architecture.get("tech_stack", {})
+            
+            # INJECT confirmed features into architecture if not already present
+            if confirmed_features and not architecture.get("features"):
+                architecture["features"] = confirmed_features
+            elif confirmed_features:
+                # Merge confirmed features with any architect-generated features
+                existing_ids = {f.get("id") for f in architecture.get("features", [])}
+                for cf in confirmed_features:
+                    if cf["id"] not in existing_ids:
+                        architecture["features"].append(cf)
             
             # Send architecture info
             yield f"data: {json.dumps({'type': 'architecture_designed', 'data': {'project_type': arch_info.get('project_type', 'fullstack'), 'complexity': analysis.get('complexity', 'moderate'), 'tech_stack': tech_stack, 'estimated_files': analysis.get('estimated_files', 20)}})}\n\n"
@@ -696,44 +862,86 @@ async def process_message_stream(
             
             generated_files = []
             
-            # Limit files to prevent rate limiting (max 35 files)
-            max_files = 35
+            # Limit files to prevent extreme cases (max 100 files)
+            max_files = 100
             if len(files_to_generate) > max_files:
                 logger.warning("file_count_limited", original=len(files_to_generate), limited=max_files)
                 files_to_generate = files_to_generate[:max_files]
                 yield f"data: {json.dumps({'type': 'warning', 'data': {'message': f'⚠️ Limiting to {max_files} essential files to avoid rate limits'}})}\n\n"
             
-            for i, file_spec in enumerate(files_to_generate):
-                filepath = file_spec.get("filepath", f"file_{i}")
+            # Group files by priority for efficient generation
+            files_by_priority = {}
+            for f in files_to_generate:
+                p = f.get("priority", 999)
+                if p not in files_by_priority:
+                    files_by_priority[p] = []
+                files_by_priority[p].append(f)
+            
+            sorted_priorities = sorted(files_by_priority.keys())
+            total_processed = 0
+            
+            # Semaphore to limit concurrency and prevent rate limiting
+            # 3 concurrent requests is a safe balance for Gemini
+            sem = asyncio.Semaphore(3)
+            
+            for priority in sorted_priorities:
+                batch = files_by_priority[priority]
                 
-                try:
-                    logger.info("generating_file", index=i+1, total=len(files_to_generate), filepath=filepath)
+                async def generate_with_semaphore(file_spec, idx):
+                    async with sem:
+                        filepath = file_spec.get("filepath", f"file_{idx}")
+                        try:
+                            logger.info("generating_file", index=idx, total=len(files_to_generate), filepath=filepath)
+                            
+                            # Pass currently generated files as context
+                            # Note: Files in the same batch won't see each other, which is why we batch by priority
+                            return await orchestrator.code_generator.generate_file(
+                                file_spec=file_spec,
+                                architecture=architecture,
+                                generated_files=generated_files,
+                                problem_statement=message
+                            )
+                        except Exception as e:
+                            error_msg = str(e)
+                            logger.error("file_generation_error", filepath=filepath, error=error_msg)
+                            
+                            # Handle rate limits
+                            if "rate" in error_msg.lower() or "429" in error_msg:
+                                logger.warning("rate_limit_detected", waiting=5)
+                                await asyncio.sleep(5)
+                                # Retry once
+                                try:
+                                    return await orchestrator.code_generator.generate_file(
+                                        file_spec=file_spec,
+                                        architecture=architecture,
+                                        generated_files=generated_files,
+                                        problem_statement=message
+                                    )
+                                except Exception as retry_e:
+                                    return {"error": str(retry_e), "filepath": filepath}
+                            
+                            return {"error": error_msg, "filepath": filepath}
+
+                # Create tasks for this batch
+                tasks = []
+                for file_spec in batch:
+                    total_processed += 1
+                    tasks.append(generate_with_semaphore(file_spec, total_processed))
+                
+                # Execute batch
+                if tasks:
+                    batch_results = await asyncio.gather(*tasks)
                     
-                    file_result = await orchestrator.code_generator.generate_file(
-                        file_spec=file_spec,
-                        architecture=architecture,
-                        generated_files=generated_files,
-                        problem_statement=message
-                    )
-                    
-                    generated_files.append(file_result)
-                    
-                    # Stream file generation event
-                    yield f"data: {json.dumps({'type': 'file_generated', 'data': file_result})}\n\n"
-                    
-                    # Small delay to avoid rate limiting
-                    await asyncio.sleep(0.1)
-                    
-                except Exception as e:
-                    error_msg = str(e)
-                    logger.error("file_generation_error", filepath=filepath, error=error_msg, index=i+1)
-                    yield f"data: {json.dumps({'type': 'file_error', 'data': {'filepath': filepath, 'error': error_msg}})}\n\n"
-                    
-                    # If we get a rate limit error, wait longer
-                    if "rate" in error_msg.lower() or "429" in error_msg or "quota" in error_msg.lower():
-                        logger.warning("rate_limit_detected", waiting=5)
-                        await asyncio.sleep(5)
-                    continue
+                    # Process results
+                    for res in batch_results:
+                        if "error" in res:
+                            yield f"data: {json.dumps({'type': 'file_error', 'data': res})}\n\n"
+                        else:
+                            generated_files.append(res)
+                            yield f"data: {json.dumps({'type': 'file_generated', 'data': res})}\n\n"
+                
+                # Small delay between batches to let API cool down
+                await asyncio.sleep(0.5)
             
             # ========================================
             # PHASE 4: DEPENDENCY VALIDATION
@@ -771,10 +979,69 @@ async def process_message_stream(
                     except Exception as e:
                         logger.error("missing_file_generation_error", path=missing_path, error=str(e))
             
+            # ========================================
+            # PHASE 5: CODE REVIEW
+            # ========================================
+            yield f"data: {json.dumps({'type': 'phase_change', 'data': {'phase': 'reviewing_code', 'message': '🔍 Reviewing code for syntax errors...'}})}\n\n"
+            
+            try:
+                review_result = await orchestrator.code_reviewer.review_and_fix_files(
+                    files=generated_files,
+                    architecture=architecture
+                )
+                
+                generated_files = review_result.get("files", generated_files)
+                review_summary = review_result.get("review_summary", {})
+                
+                if review_summary.get("files_fixed", 0) > 0:
+                    fixed_count = review_summary.get("files_fixed", 0)
+                    msg = f"✅ Fixed syntax errors in {fixed_count} files"
+                    yield f"data: {json.dumps({'type': 'code_fixed', 'data': {'message': msg, 'summary': review_summary}})}\n\n"
+                else:
+                    yield f"data: {json.dumps({'type': 'code_reviewed', 'data': {'message': '✅ Code review passed - no syntax errors'}})}\n\n"
+                
+            except Exception as e:
+                logger.error("code_review_error", error=str(e))
+                yield f"data: {json.dumps({'type': 'warning', 'data': {'message': f'⚠️ Code review skipped: {str(e)[:100]}'}})}\n\n"
+            
+            # ========================================
+            # PHASE 6: UNIT TEST GENERATION
+            # ========================================
+            yield f"data: {json.dumps({'type': 'phase_change', 'data': {'phase': 'generating_tests', 'message': '🧪 Generating unit tests for each file...'}})}\n\n"
+            
+            try:
+                test_result = await orchestrator.test_generator.generate_tests(
+                    generated_files=generated_files,
+                    architecture=architecture,
+                    problem_statement=conv.problem_statement or message
+                )
+                
+                test_files = test_result.get("test_files", [])
+                config_files = test_result.get("config_files", [])
+                
+                for tf in test_files:
+                    generated_files.append(tf)
+                    yield f"data: {json.dumps({'type': 'file_generated', 'data': tf})}\n\n"
+                
+                for cf in config_files:
+                    if not any(f.get("filepath") == cf.get("filepath") for f in generated_files):
+                        generated_files.append(cf)
+                        yield f"data: {json.dumps({'type': 'file_generated', 'data': cf})}\n\n"
+                
+                test_count = len(test_files)
+                yield f"data: {json.dumps({'type': 'tests_generated', 'data': {'message': f'✅ Generated {test_count} unit test files', 'test_count': test_count, 'summary': test_result.get('summary', {})}})}\n\n"
+                
+            except Exception as e:
+                logger.error("unit_test_generation_error", error=str(e))
+                yield f"data: {json.dumps({'type': 'warning', 'data': {'message': f'⚠️ Unit test generation skipped: {str(e)[:100]}'}})}\n\n"
+            
             conv.phase = ConversationPhase.CODE_GENERATED
             
-            # Send completion event
-            yield f"data: {json.dumps({'type': 'code_generated', 'data': {'message': f'🎉 Generated {len(generated_files)} files successfully!', 'total_files': len(generated_files), 'project_type': arch_info.get('project_type')}})}\n\n"
+            # Get usage summary
+            usage_summary = tracker.get_summary()
+            
+            # Send completion event with usage stats
+            yield f"data: {json.dumps({'type': 'code_generated', 'data': {'message': f'🎉 Generated {len(generated_files)} files successfully!', 'total_files': len(generated_files), 'project_type': arch_info.get('project_type'), 'usage': {'total_calls': usage_summary.get('total_calls', 0), 'total_tokens': usage_summary.get('total_tokens', 0), 'total_cost': usage_summary.get('total_cost', 0)}}})}\n\n"
         
         elif conv.phase == ConversationPhase.CODE_GENERATED:
             # Handle modification requests
@@ -849,38 +1116,145 @@ async def reset_usage():
 
 @app.get("/api/v1/agents")
 async def get_agents():
-    """Get available agents info"""
+    """Get available agents info with current usage statistics"""
+    usage_summary = tracker.get_summary()
+    usage_by_agent = usage_summary.get("usage_by_agent", {})
+    
+    agents_info = [
+        {
+            "id": "feature_planner",
+            "name": "Feature Planner",
+            "role": "FeaturePlannerAgent",
+            "phase": "planning",
+            "description": "Analyzes requirements and proposes features for user confirmation",
+            "icon": "💡",
+            "usage": usage_by_agent.get("Feature Planner", {"calls": 0, "tokens": 0})
+        },
+        {
+            "id": "architect",
+            "name": "Architect",
+            "role": "ArchitectAgent",
+            "phase": "discovery",
+            "description": "Designs system architecture, tech stack, and database schema",
+            "icon": "🏗️",
+            "usage": usage_by_agent.get("Architect", {"calls": 0, "tokens": 0})
+        },
+        {
+            "id": "file_planner",
+            "name": "File Planner",
+            "role": "FilePlannerAgent",
+            "phase": "design",
+            "description": "Plans all files needed for the project with dependencies",
+            "icon": "📋",
+            "usage": usage_by_agent.get("File Planner", {"calls": 0, "tokens": 0})
+        },
+        {
+            "id": "code_generator",
+            "name": "Code Generator",
+            "role": "CodeGeneratorAgent",
+            "phase": "implementation",
+            "description": "Generates production-ready code files with full context",
+            "icon": "⚙️",
+            "usage": usage_by_agent.get("Code Generator", {"calls": 0, "tokens": 0})
+        },
+        {
+            "id": "validator",
+            "name": "Integration Validator",
+            "role": "IntegrationValidatorAgent",
+            "phase": "validation",
+            "description": "Validates imports, types, and integration between files",
+            "icon": "🔗",
+            "usage": usage_by_agent.get("Validator", {"calls": 0, "tokens": 0})
+        },
+        {
+            "id": "code_reviewer",
+            "name": "Code Reviewer",
+            "role": "CodeReviewerAgent",
+            "phase": "review",
+            "description": "Reviews code for syntax errors and fixes them",
+            "icon": "🔍",
+            "usage": usage_by_agent.get("Code Reviewer", {"calls": 0, "tokens": 0})
+        },
+        {
+            "id": "test_generator",
+            "name": "Test Generator",
+            "role": "TestGeneratorAgent",
+            "phase": "testing",
+            "description": "Generates unit tests for each code file",
+            "icon": "🧪",
+            "usage": usage_by_agent.get("Test Generator", {"calls": 0, "tokens": 0})
+        },
+        {
+            "id": "execution",
+            "name": "Execution Agent",
+            "role": "ExecutionAgent",
+            "phase": "execution",
+            "description": "Executes generated code, detects errors, and applies auto-fixes",
+            "icon": "🚀",
+            "usage": usage_by_agent.get("Execution", {"calls": 0, "tokens": 0})
+        }
+    ]
+    
     return {
-        "agents": [
-            {
-                "role": "architect",
-                "phase": "discovery",
-                "description": "Analyzes requirements and designs system architecture"
-            },
-            {
-                "role": "file_planner",
-                "phase": "design",
-                "description": "Plans all files needed for the project"
-            },
-            {
-                "role": "code_generator",
-                "phase": "implementation",
-                "description": "Generates production-ready code files"
-            },
-            {
-                "role": "validator",
-                "phase": "validation",
-                "description": "Validates integration between files"
-            }
-        ],
-        "phases": ["discovery", "design", "implementation", "validation"],
+        "agents": agents_info,
+        "phases": ["planning", "discovery", "design", "implementation", "validation", "review", "testing", "execution"],
         "capabilities": [
+            "Feature planning with user confirmation",
             "Dynamic architecture design",
             "Multi-project type support (frontend/backend/fullstack/microservices)",
-            "Intelligent file planning",
+            "Intelligent file planning with dependencies",
             "Context-aware code generation",
-            "Integration validation"
+            "Integration validation",
+            "Syntax error detection and auto-fix",
+            "Unit test generation for each file",
+            "Auto-fix execution"
+        ],
+        "mcp_integration": {
+            "enabled": True,
+            "description": "Agents communicate via Model Context Protocol for coordinated generation"
+        },
+        "total_usage": {
+            "calls": usage_summary.get("total_calls", 0),
+            "tokens": usage_summary.get("total_tokens", 0),
+            "cost": usage_summary.get("total_cost", 0)
+        }
+    }
+
+
+@app.get("/api/v1/preset/symptom-tracker")
+async def get_symptom_tracker_preset():
+    """Get the symptom tracker preset problem statement"""
+    return {
+        "name": "Symptom Tracker",
+        "description": "Health symptom tracking application",
+        "problem_statement": SYMPTOM_TRACKER_PRESET,
+        "features": [
+            "User Authentication",
+            "Symptom Logging with Severity",
+            "Associated Factors Tracking",
+            "Pattern Analysis & Charts",
+            "Trigger Detection",
+            "Symptom History & Search",
+            "Data Export (CSV/PDF)",
+            "Reminders",
+            "Dashboard with Insights"
         ]
+    }
+
+
+@app.get("/api/v1/usage/detailed")
+async def get_detailed_usage():
+    """Get detailed LLM usage statistics broken down by agent"""
+    summary = tracker.get_summary()
+    return {
+        "summary": summary,
+        "by_agent": summary.get("usage_by_agent", {}),
+        "by_model": summary.get("usage_by_model", {}),
+        "timeline": tracker.get_timeline(),
+        "session_info": {
+            "duration_seconds": summary.get("session_duration_seconds", 0),
+            "calls_per_minute": summary.get("calls_per_minute", 0)
+        }
     }
 
 
@@ -891,24 +1265,37 @@ async def get_agents():
 @app.post("/api/execute")
 async def execute_generated_app(request: Request):
     """
-    Execute the generated application.
+    Execute the generated application with automatic error detection and fixing.
     
-    Saves files to disk, installs dependencies, and starts the dev server.
-    Returns a streaming response with execution logs and status.
+    Uses the ExecutionAgent to:
+    1. Save files to disk
+    2. Install dependencies
+    3. Detect and fix build/runtime errors automatically
+    4. Start the dev server
+    
+    Returns a streaming response with execution logs, fixes applied, and status.
     """
     body = await request.json()
     files = body.get("files", [])
     conversation_id = body.get("conversation_id", str(uuid.uuid4()))
+    use_auto_fix = body.get("auto_fix", True)  # Enable auto-fix by default
     
     if not files:
         raise HTTPException(status_code=400, detail="No files provided")
     
     async def stream_execution():
         try:
-            async for event in execute_application(files, conversation_id):
-                yield f"data: {json.dumps(event)}\n\n"
+            if use_auto_fix:
+                # Use ExecutionAgent with auto-fix capabilities
+                async for event in execution_agent.execute_with_auto_fix(files, conversation_id):
+                    yield f"data: {json.dumps(event)}\n\n"
+            else:
+                # Use original execution without auto-fix
+                async for event in execute_application(files, conversation_id):
+                    yield f"data: {json.dumps(event)}\n\n"
         except Exception as e:
-            logger.error("execution_error", error=str(e))
+            import traceback
+            logger.error("execution_error", error=str(e), traceback=traceback.format_exc())
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
     
     return StreamingResponse(
@@ -940,38 +1327,50 @@ async def download_project(request: Request):
     Zip and download the generated project.
     Expects list of files in the request body.
     """
+    import io
+    import zipfile
+    
     body = await request.json()
     files = body.get("files", [])
     
     if not files:
         raise HTTPException(status_code=400, detail="No files provided")
-        
-    import io
-    import zipfile
+    
+    logger.info("download_request", file_count=len(files))
     
     # Create a zip file in memory
     zip_buffer = io.BytesIO()
+    files_added = 0
     
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
         for file_info in files:
             filepath = file_info.get("filepath", "")
             content = file_info.get("content", "")
             
-            if filepath and content:
+            if filepath:
                 # Ensure we don't have absolute paths
                 clean_path = filepath.lstrip("/")
-                zip_file.writestr(clean_path, content)
+                # Write file even if content is empty (creates empty file)
+                zip_file.writestr(clean_path, content or "")
+                files_added += 1
     
-    # Reset buffer position
-    zip_buffer.seek(0)
+    logger.info("download_zip_created", files_added=files_added)
+    
+    # Get the zip content
+    zip_content = zip_buffer.getvalue()
+    zip_size = len(zip_content)
     
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"ai-generated-project-{timestamp}.zip"
     
     return StreamingResponse(
-        iter([zip_buffer.getvalue()]),
+        iter([zip_content]),
         media_type="application/zip",
-        headers={"Content-Disposition": f"attachment; filename={filename}"}
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Length": str(zip_size),
+            "Cache-Control": "no-cache"
+        }
     )
 
 

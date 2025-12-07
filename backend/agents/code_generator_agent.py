@@ -198,11 +198,35 @@ REMEMBER: ZERO COMMENTS IN THE CODE. The code should be self-explanatory through
             if api:
                 api_design = f"\n\n## API Design\n{json.dumps(api, indent=2)}"
         
-        # Get features
+        # Get features - identify which feature this file implements
         features = architecture.get("features", [])
+        file_feature_id = file_spec.get("feature", "")
+        current_feature = None
         features_text = ""
-        if features:
-            features_text = "\n\n## Features to Implement\n"
+        
+        if file_feature_id:
+            for f in features:
+                if f.get("id") == file_feature_id:
+                    current_feature = f
+                    break
+        
+        if current_feature:
+            features_text = f"""
+
+## THIS FILE IMPLEMENTS: {current_feature.get('name')}
+
+**Feature Description**: {current_feature.get('description')}
+**Priority**: {current_feature.get('priority', 'high')}
+
+You MUST fully implement this feature. Include:
+- Complete UI with forms, lists, and interactions
+- Full CRUD operations where applicable
+- Proper state management
+- Error handling and loading states
+- Validation
+"""
+        elif features:
+            features_text = "\n\n## All Features in This Application\n"
             for f in features:
                 features_text += f"- **{f.get('name')}**: {f.get('description')}\n"
 
@@ -239,13 +263,15 @@ REMEMBER: ZERO COMMENTS IN THE CODE. The code should be self-explanatory through
 
 ## CRITICAL Instructions
 
-1. Generate COMPLETE, working code - no placeholders
-2. Follow {file_spec.get('language', 'the language')} best practices
-3. Include proper imports based on the tech stack
-4. **DO NOT ADD ANY COMMENTS** - no //, no #, no /* */, no docstrings, no JSDoc
-5. Use self-documenting variable and function names instead of comments
-6. Implement proper error handling
-7. Make it production-ready
+1. Generate COMPLETE, FULLY FUNCTIONAL code - no placeholders, no "TODO", no "..."
+2. If this file is for a FEATURE, implement ALL functionality for that feature
+3. Include ALL necessary imports
+4. **DO NOT ADD ANY COMMENTS** - no //, no #, no /* */, no docstrings
+5. Implement ALL CRUD operations if this is an API route
+6. Implement FULL forms with validation if this is a form component
+7. Implement FULL data display with loading/error states if this is a list component
+8. Include proper error handling
+9. Make it production-ready with real functionality
 
 ## CRITICAL: Module Format for Config Files
 
@@ -282,6 +308,126 @@ export default {{
 ```
 
 **ZERO COMMENTS ALLOWED. The code must be clean without any comments.**
+
+## CRITICAL: Database Files (PostgreSQL with pg - NO PRISMA)
+
+If generating **lib/db.ts** (database connection):
+```typescript
+import {{ Pool }} from 'pg'
+
+const pool = new Pool({{
+  connectionString: process.env.DATABASE_URL,
+}})
+
+export async function query(text: string, params?: any[]) {{
+  const result = await pool.query(text, params)
+  return result.rows
+}}
+
+export default pool
+```
+
+If generating **db/schema.sql**:
+```sql
+CREATE TABLE IF NOT EXISTS users (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(255) NOT NULL,
+  email VARCHAR(255) UNIQUE NOT NULL,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+## CRITICAL: Docker Files (USE NPM ONLY - NO YARN)
+
+**IMPORTANT: Use npm, NOT yarn. Do NOT reference yarn.lock - it does not exist.**
+
+If generating **Dockerfile**, use EXACTLY this structure:
+```dockerfile
+FROM node:18-alpine AS deps
+WORKDIR /app
+COPY package.json package-lock.json* ./
+RUN npm install --legacy-peer-deps
+
+FROM node:18-alpine AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+RUN npm run build
+
+FROM node:18-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=builder /app/public ./public
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
+EXPOSE 3000
+CMD ["node", "server.js"]
+```
+
+If generating **docker-compose.yml** (DO NOT include version field - it's obsolete):
+```yaml
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/appdb
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: appdb
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+```
+
+If generating **next.config.js** for Docker, include:
+```javascript
+module.exports = {{
+  output: 'standalone',
+}}
+```
+
+## CRITICAL: API Routes with PostgreSQL (NO PRISMA)
+
+For API routes, use raw SQL with parameterized queries:
+```typescript
+import {{ query }} from '@/lib/db'
+import {{ NextResponse }} from 'next/server'
+
+export async function GET() {{
+  const rows = await query('SELECT * FROM tablename ORDER BY created_at DESC')
+  return NextResponse.json(rows)
+}}
+
+export async function POST(request: Request) {{
+  const body = await request.json()
+  const rows = await query(
+    'INSERT INTO tablename (field1, field2) VALUES ($1, $2) RETURNING *',
+    [body.field1, body.field2]
+  )
+  return NextResponse.json(rows[0])
+}}
+```
 
 Return ONLY the raw code content. No explanations or markdown blocks."""
 
@@ -344,6 +490,10 @@ Return ONLY the raw code content. No explanations or markdown blocks."""
             "Below is the code",
             "The following is",
             "Generated code:",
+            "Code for",
+            "This is the code",
+            "Sure, here",
+            "Certainly, here",
         ]
         for prefix in prefixes_to_remove:
             if content.lower().startswith(prefix.lower()):

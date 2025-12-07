@@ -195,8 +195,9 @@ async def execute_node_project(
     
     # Install dependencies
     try:
+        # Optimize npm install with flags
         install_process = await asyncio.create_subprocess_exec(
-            "npm", "install", "--legacy-peer-deps",
+            "npm", "install", "--legacy-peer-deps", "--no-audit", "--no-fund", "--prefer-offline",
             cwd=project_dir,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
@@ -204,7 +205,7 @@ async def execute_node_project(
         
         stdout, stderr = await asyncio.wait_for(
             install_process.communicate(),
-            timeout=180  # 3 minute timeout for npm install
+            timeout=300  # 5 minute timeout
         )
         
         if install_process.returncode != 0:
@@ -222,7 +223,7 @@ async def execute_node_project(
     except asyncio.TimeoutError:
         yield {
             "type": "error",
-            "message": "npm install timed out after 3 minutes"
+            "message": "npm install timed out after 5 minutes"
         }
         return
     except Exception as e:

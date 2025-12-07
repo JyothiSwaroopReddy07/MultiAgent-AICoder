@@ -34,23 +34,73 @@ class ArchitectAgent(BaseAgent):
     def get_system_prompt(self) -> str:
         return """You are a Software Architect. Return JSON only, no markdown.
 
-Response format:
+## YOUR TASK
+Analyze the problem statement and design a COMPLETE architecture with implementation files for ALL features.
+
+## CRITICAL RULES
+
+1. Extract ALL features from the problem statement
+2. For EACH feature, generate these files:
+   - Page: app/[feature-slug]/page.tsx
+   - Form component: components/[feature-slug]/[Feature]Form.tsx
+   - List component: components/[feature-slug]/[Feature]List.tsx
+   - API route: app/api/[feature-slug]/route.ts
+   - Hook: hooks/use[Feature].ts
+
+3. Create database models for ALL entities mentioned
+4. Generate as many files as needed for a complete implementation (typically 30-100)
+5. Use kebab-case for folders, PascalCase for components
+
+## RESPONSE FORMAT
+
 {
-  "analysis": {"problem_summary": "...", "complexity": "simple|moderate|complex", "estimated_files": 20},
-  "architecture": {"project_type": "fullstack_monolith", "pattern": "MVC"},
+  "analysis": {
+    "problem_summary": "Brief summary of what the app does",
+    "complexity": "simple|moderate|complex",
+    "estimated_files": 25
+  },
+  "architecture": {
+    "project_type": "fullstack_monolith",
+    "pattern": "MVC"
+  },
   "tech_stack": {
     "frontend": {"framework": "Next.js 14", "language": "TypeScript", "styling": "Tailwind CSS"},
     "backend": {"framework": "Next.js API Routes", "language": "TypeScript"},
-    "database": {"primary": "PostgreSQL", "orm": "Prisma"}
+    "database": {"primary": "PostgreSQL", "client": "pg"}
   },
-  "files": [
-    {"filepath": "package.json", "filename": "package.json", "purpose": "Dependencies", "language": "json", "category": "config"},
-    {"filepath": "src/app/page.tsx", "filename": "page.tsx", "purpose": "Home page", "language": "typescript", "category": "frontend"}
+  "database_schema": {
+    "tables": [
+      {"name": "table_name", "columns": ["id SERIAL PRIMARY KEY", "field1 VARCHAR(255)", "created_at TIMESTAMP DEFAULT NOW()"]}
+    ]
+  },
+  "features": [
+    {"id": "f1", "name": "Feature Name", "description": "What this feature does", "priority": "high"}
   ],
-  "features": [{"id": "f1", "name": "Feature", "description": "...", "priority": "high"}]
+  "files": [
+    {"filepath": "path/to/file.ext", "filename": "file.ext", "purpose": "What this file does", "language": "typescript", "category": "frontend|backend|config|database|shared", "feature": "f1"}
+  ]
 }
 
-Rules: Use Next.js 14 + TypeScript + Tailwind + Prisma for web apps. List 15-30 files. Include filename for each file.
+## FILE CATEGORIES
+- config: package.json, tsconfig.json, tailwind.config.ts, next.config.js, postcss.config.js
+- database: lib/db.ts (pg Pool connection), db/schema.sql (SQL schema), db/seed.sql (optional seed data)
+- shared: types/index.ts, lib/utils.ts
+- frontend: app/*/page.tsx, components/*/*.tsx, hooks/*.ts
+- backend: app/api/*/route.ts
+
+## DATABASE APPROACH (IMPORTANT)
+Use PostgreSQL with 'pg' package (node-postgres) - NO PRISMA:
+- lib/db.ts: Create a Pool connection using 'pg' package
+- db/schema.sql: SQL file with CREATE TABLE statements
+- API routes use raw SQL queries with parameterized queries for security
+
+## DOCKER FILES (REQUIRED)
+ALWAYS include these Docker files for easy deployment:
+1. **Dockerfile**: Multi-stage build for Next.js
+2. **docker-compose.yml**: Services for app (port 3000) and PostgreSQL db (port 5432)
+3. **.dockerignore**: Exclude node_modules, .next, .git, etc.
+
+IMPORTANT: Analyze the ACTUAL problem statement and generate files specific to THAT application. Do NOT use generic placeholder names.
 """
 
     async def process_task(self, task_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -109,33 +159,44 @@ Rules: Use Next.js 14 + TypeScript + Tailwind + Prisma for web apps. List 15-30 
     ) -> str:
         """Build the prompt for architecture design"""
         constraint_text = ""
-        if constraints:
-            constraint_text = f"""
-## Constraints & Preferences
-{json.dumps(constraints, indent=2)}
-"""
+        confirmed_features = constraints.get("confirmed_features", [])
         
-        return f"""Analyze this software project requirement and design a complete system architecture.
+        if confirmed_features:
+            constraint_text = "\n\n## CONFIRMED FEATURES (You MUST implement these):\n"
+            for f in confirmed_features:
+                constraint_text += f"- **{f.get('name')}**: {f.get('description')}\n"
+        
+        return f"""Design a complete architecture for this application:
 
 ## Problem Statement
 {problem_statement}
 {constraint_text}
 
-## Your Task
+## YOUR TASK
 
-1. **Deeply analyze** what this project needs
-2. **Determine** the optimal project type and architecture
-3. **Design** a complete folder structure
-4. **List ALL files** needed for a production-ready application
-5. **Define** the technology stack
-6. **Design** the database schema (if applicable)
-7. **Design** the API (if applicable)
-8. **List** all features to implement
+1. **Analyze** the problem statement carefully
+2. **Identify ALL features** that need to be built
+3. **Design database models** for all data entities
+4. **Generate implementation files** for EACH feature:
+   - A page file: app/[feature-slug]/page.tsx
+   - Form component: components/[feature-slug]/[Feature]Form.tsx
+   - List component: components/[feature-slug]/[Feature]List.tsx
+   - Card component: components/[feature-slug]/[Feature]Card.tsx
+   - API routes: app/api/[feature-slug]/route.ts and app/api/[feature-slug]/[id]/route.ts
+   - React hook: hooks/use[Feature].ts
 
-Be thorough and comprehensive. For complex applications, you may need 50-100+ files.
-Include tests, documentation, CI/CD, Docker files, environment configs, etc.
+5. **Include essential config files**: package.json, tsconfig.json, tailwind.config.ts, next.config.js, postcss.config.js, db/schema.sql, lib/db.ts
+6. **Include shared files**: types/index.ts, lib/db.ts, lib/utils.ts
+7. **Include layout**: app/layout.tsx, app/page.tsx (dashboard), components/layout/Navigation.tsx
 
-Respond with a complete JSON architecture document as specified in your system prompt."""
+## RULES
+- Generate as many files as needed for a complete implementation (typically 30-100)
+- Use descriptive names based on the ACTUAL features in the problem statement
+- Every feature needs: page + form + list + API + hook
+- Include the "feature" field in each file to link it to a feature ID
+- Do NOT use generic placeholder names - use names from the actual problem
+
+Respond with JSON only, following the format in your system prompt."""
 
     def _parse_architecture_response(self, response: str) -> Dict[str, Any]:
         """Parse the architecture response from LLM"""
@@ -180,7 +241,7 @@ Respond with a complete JSON architecture document as specified in your system p
                 "tech_stack": {
                     "frontend": {"framework": "Next.js 14", "language": "TypeScript"},
                     "backend": {"framework": "Next.js API Routes", "language": "TypeScript"},
-                    "database": {"primary": "PostgreSQL", "orm": "Prisma"}
+                    "database": {"primary": "PostgreSQL", "client": "pg"}
                 },
                 "files": [],
                 "parse_error": str(e)
@@ -189,190 +250,451 @@ Respond with a complete JSON architecture document as specified in your system p
             return default_arch
     
     def _generate_default_files(self, architecture: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Generate a comprehensive default file list based on architecture"""
+        """
+        Generate a comprehensive file list based on architecture AND features.
+        This is a FALLBACK when the LLM doesn't return a proper file list.
+        It dynamically generates files based on whatever features are in the architecture.
+        """
         tech_stack = architecture.get("tech_stack", {})
-        frontend = tech_stack.get("frontend", {})
-        backend = tech_stack.get("backend", {})
         database = tech_stack.get("database", {})
+        features = architecture.get("features", [])
+        db_schema = architecture.get("database_schema", {})
         
         files = []
         priority = 1
         
-        # Config files (priority 1-10)
+        # ========================================
+        # CONFIG FILES (Always needed)
+        # ========================================
         config_files = [
-            ("package.json", "json", "Project dependencies and scripts", "config"),
-            ("tsconfig.json", "json", "TypeScript configuration", "config"),
-            ("tailwind.config.ts", "typescript", "Tailwind CSS configuration", "config"),
-            ("next.config.js", "javascript", "Next.js configuration", "config"),
-            ("postcss.config.js", "javascript", "PostCSS configuration", "config"),
-            (".eslintrc.json", "json", "ESLint configuration", "config"),
-            (".prettierrc", "json", "Prettier configuration", "config"),
-            (".env.example", "shell", "Environment variables template", "config"),
-            (".gitignore", "text", "Git ignore patterns", "config"),
+            ("package.json", "json", "Project dependencies and scripts"),
+            ("tsconfig.json", "json", "TypeScript configuration"),
+            ("tailwind.config.ts", "typescript", "Tailwind CSS configuration"),
+            ("next.config.js", "javascript", "Next.js configuration"),
+            ("postcss.config.js", "javascript", "PostCSS configuration"),
+            (".env.example", "shell", "Environment variables template"),
+            (".gitignore", "text", "Git ignore patterns"),
         ]
         
-        for filename, lang, purpose, category in config_files:
+        for filename, lang, purpose in config_files:
             files.append({
                 "filepath": filename,
                 "filename": filename,
                 "purpose": purpose,
                 "language": lang,
                 "priority": priority,
-                "dependencies": [],
-                "category": category
+                "category": "config"
             })
             priority += 1
         
-        # Prisma schema if using PostgreSQL
-        if database.get("orm") == "Prisma" or database.get("primary") == "PostgreSQL":
+        # ========================================
+        # DATABASE SCHEMA (PostgreSQL with pg)
+        # ========================================
+        if database.get("primary") == "PostgreSQL":
+            tables = db_schema.get("tables", db_schema.get("models", []))
+            tables_desc = ", ".join([t.get("name", "") for t in tables]) if tables else "Application tables"
+            
+            content_hints = []
+            for t in tables:
+                columns = t.get("columns", t.get("fields", []))
+                content_hints.append(f"CREATE TABLE {t.get('name')}: {', '.join(columns)}")
+            
             files.append({
-                "filepath": "prisma/schema.prisma",
-                "filename": "schema.prisma",
-                "purpose": "Database schema with all models and relationships",
-                "language": "prisma",
+                "filepath": "db/schema.sql",
+                "filename": "schema.sql",
+                "purpose": f"SQL schema with tables: {tables_desc}",
+                "language": "sql",
                 "priority": priority,
-                "dependencies": [],
-                "category": "database"
+                "category": "database",
+                "content_hints": content_hints if content_hints else [
+                    "CREATE TABLE statements",
+                    "Use SERIAL for auto-increment IDs",
+                    "Include created_at and updated_at timestamps",
+                    "Add appropriate indexes"
+                ]
             })
             priority += 1
-        
-        # App layout and globals
-        app_files = [
-            ("app/layout.tsx", "layout.tsx", "typescript", "Root layout with providers and metadata", "frontend"),
-            ("app/globals.css", "globals.css", "css", "Global styles with Tailwind directives", "frontend"),
-            ("app/page.tsx", "page.tsx", "typescript", "Home page component", "frontend"),
-            ("app/loading.tsx", "loading.tsx", "typescript", "Loading state component", "frontend"),
-            ("app/error.tsx", "error.tsx", "typescript", "Error boundary component", "frontend"),
-            ("app/not-found.tsx", "not-found.tsx", "typescript", "404 page component", "frontend"),
-        ]
-        
-        for filepath, filename, lang, purpose, category in app_files:
+            
             files.append({
-                "filepath": filepath,
-                "filename": filename,
-                "purpose": purpose,
-                "language": lang,
+                "filepath": "db/init.sql",
+                "filename": "init.sql",
+                "purpose": "Database initialization script (creates tables)",
+                "language": "sql",
                 "priority": priority,
-                "dependencies": ["package.json", "tailwind.config.ts"],
-                "category": category
+                "category": "database",
+                "content_hints": [
+                    "Include schema.sql content",
+                    "Add any seed data if needed"
+                ]
             })
             priority += 1
         
-        # Shared types
+        # ========================================
+        # APP LAYOUT AND BASE PAGES
+        # ========================================
+        files.append({
+            "filepath": "app/layout.tsx",
+            "filename": "layout.tsx",
+            "purpose": "Root layout with providers and navigation",
+            "language": "typescript",
+            "priority": priority,
+            "category": "frontend"
+        })
+        priority += 1
+        
+        files.append({
+            "filepath": "app/globals.css",
+            "filename": "globals.css",
+            "purpose": "Global styles with Tailwind directives",
+            "language": "css",
+            "priority": priority,
+            "category": "frontend"
+        })
+        priority += 1
+        
+        # Dashboard/Home page with links to all features
+        feature_links = [f.get("name", "Feature") for f in features]
+        files.append({
+            "filepath": "app/page.tsx",
+            "filename": "page.tsx",
+            "purpose": "Dashboard/Home page with overview and navigation",
+            "language": "typescript",
+            "priority": priority,
+            "category": "frontend",
+            "content_hints": [f"Link to {name}" for name in feature_links] if feature_links else ["Main landing page"]
+        })
+        priority += 1
+        
+        # ========================================
+        # SHARED FILES
+        # ========================================
+        # Types - include interfaces for all features
+        type_hints = [f"Interface for {f.get('name', 'Feature')}" for f in features]
         files.append({
             "filepath": "types/index.ts",
             "filename": "index.ts",
-            "purpose": "TypeScript type definitions for the entire application",
+            "purpose": "TypeScript interfaces for all data models",
             "language": "typescript",
             "priority": priority,
-            "dependencies": [],
+            "category": "shared",
+            "content_hints": type_hints if type_hints else ["Define types based on data models"]
+        })
+        priority += 1
+        
+        files.append({
+            "filepath": "lib/db.ts",
+            "filename": "db.ts",
+            "purpose": "PostgreSQL connection pool using pg package",
+            "language": "typescript",
+            "priority": priority,
+            "category": "shared",
+            "content_hints": [
+                "Import Pool from 'pg'",
+                "Create pool with DATABASE_URL from env",
+                "Export query helper function",
+                "Export pool for direct access"
+            ]
+        })
+        priority += 1
+        
+        files.append({
+            "filepath": "lib/utils.ts",
+            "filename": "utils.ts",
+            "purpose": "Utility functions (cn, formatDate, etc.)",
+            "language": "typescript",
+            "priority": priority,
             "category": "shared"
         })
         priority += 1
         
-        # Lib utilities
-        lib_files = [
-            ("lib/utils.ts", "utils.ts", "Utility functions and helpers"),
-            ("lib/db.ts", "db.ts", "Database connection and Prisma client"),
-            ("lib/auth.ts", "auth.ts", "Authentication utilities"),
-            ("lib/validations.ts", "validations.ts", "Input validation schemas"),
+        # ========================================
+        # UI COMPONENTS (Reusable)
+        # ========================================
+        ui_components = [
+            ("Button.tsx", "Reusable button with variants"),
+            ("Input.tsx", "Form input with validation"),
+            ("Card.tsx", "Card container component"),
+            ("Modal.tsx", "Modal dialog component"),
         ]
         
-        for filepath, filename, purpose in lib_files:
+        for filename, purpose in ui_components:
             files.append({
-                "filepath": filepath,
+                "filepath": f"components/ui/{filename}",
                 "filename": filename,
                 "purpose": purpose,
                 "language": "typescript",
                 "priority": priority,
-                "dependencies": ["types/index.ts"],
-                "category": "shared"
-            })
-            priority += 1
-        
-        # Components
-        component_files = [
-            ("components/ui/Button.tsx", "Button.tsx", "Reusable button component"),
-            ("components/ui/Input.tsx", "Input.tsx", "Form input component"),
-            ("components/ui/Card.tsx", "Card.tsx", "Card container component"),
-            ("components/ui/Modal.tsx", "Modal.tsx", "Modal dialog component"),
-            ("components/layout/Header.tsx", "Header.tsx", "Header with navigation"),
-            ("components/layout/Footer.tsx", "Footer.tsx", "Footer component"),
-            ("components/layout/Sidebar.tsx", "Sidebar.tsx", "Sidebar navigation"),
-        ]
-        
-        for filepath, filename, purpose in component_files:
-            files.append({
-                "filepath": filepath,
-                "filename": filename,
-                "purpose": purpose,
-                "language": "typescript",
-                "priority": priority,
-                "dependencies": ["components/ui/Button.tsx"] if "Button" not in filename else [],
                 "category": "frontend"
             })
             priority += 1
         
-        # API routes
-        api_files = [
-            ("app/api/auth/[...nextauth]/route.ts", "route.ts", "NextAuth.js authentication handler"),
-            ("app/api/health/route.ts", "route.ts", "Health check endpoint"),
-        ]
-        
-        for filepath, filename, purpose in api_files:
-            files.append({
-                "filepath": filepath,
-                "filename": filename,
-                "purpose": purpose,
-                "language": "typescript",
-                "priority": priority,
-                "dependencies": ["lib/db.ts", "lib/auth.ts"],
-                "category": "backend"
-            })
-            priority += 1
-        
-        # Middleware
+        # Navigation with links to all features
         files.append({
-            "filepath": "middleware.ts",
-            "filename": "middleware.ts",
-            "purpose": "Next.js middleware for auth and routing",
+            "filepath": "components/layout/Navigation.tsx",
+            "filename": "Navigation.tsx",
+            "purpose": "Main navigation component",
             "language": "typescript",
             "priority": priority,
-            "dependencies": ["lib/auth.ts"],
-            "category": "backend"
+            "category": "frontend",
+            "content_hints": [f"Navigation link to {f.get('name', 'Feature')}" for f in features]
         })
         priority += 1
         
-        # Docker files
-        docker_files = [
-            ("Dockerfile", "Dockerfile", "dockerfile", "Docker containerization", "infra"),
-            ("docker-compose.yml", "docker-compose.yml", "yaml", "Docker Compose for local dev", "infra"),
-        ]
-        
-        for filepath, filename, lang, purpose, category in docker_files:
+        # ========================================
+        # FEATURE-SPECIFIC FILES (Dynamic)
+        # ========================================
+        for feature in features:
+            feature_id = feature.get("id", f"f{priority}")
+            feature_name = feature.get("name", "Feature")
+            feature_desc = feature.get("description", "")
+            
+            # Convert to URL-friendly slug (kebab-case)
+            feature_slug = self._to_slug(feature_name)
+            
+            # Convert to PascalCase for component names
+            feature_pascal = self._to_pascal_case(feature_name)
+            
+            # Skip if we couldn't generate valid names
+            if not feature_slug or not feature_pascal:
+                continue
+            
+            # 1. Feature Page
             files.append({
-                "filepath": filepath,
-                "filename": filename,
-                "purpose": purpose,
-                "language": lang,
+                "filepath": f"app/{feature_slug}/page.tsx",
+                "filename": "page.tsx",
+                "purpose": f"{feature_name} page - {feature_desc}" if feature_desc else f"Main page for {feature_name}",
+                "language": "typescript",
                 "priority": priority,
-                "dependencies": [],
-                "category": category
+                "category": "frontend",
+                "feature": feature_id,
+                "content_hints": [
+                    f"Display {feature_pascal}List component",
+                    f"Include {feature_pascal}Form for adding new items",
+                    "Handle loading and error states"
+                ]
+            })
+            priority += 1
+            
+            # 2. Form Component
+            files.append({
+                "filepath": f"components/{feature_slug}/{feature_pascal}Form.tsx",
+                "filename": f"{feature_pascal}Form.tsx",
+                "purpose": f"Form to create/edit {feature_name}",
+                "language": "typescript",
+                "priority": priority,
+                "category": "frontend",
+                "feature": feature_id,
+                "content_hints": [
+                    "Form with all required fields",
+                    "Input validation",
+                    "Submit to API endpoint",
+                    "Success/error feedback"
+                ]
+            })
+            priority += 1
+            
+            # 3. List Component
+            files.append({
+                "filepath": f"components/{feature_slug}/{feature_pascal}List.tsx",
+                "filename": f"{feature_pascal}List.tsx",
+                "purpose": f"Display list of {feature_name} items",
+                "language": "typescript",
+                "priority": priority,
+                "category": "frontend",
+                "feature": feature_id,
+                "content_hints": [
+                    "Fetch data using the hook",
+                    "Map items to Card components",
+                    "Empty state handling",
+                    "Loading skeleton"
+                ]
+            })
+            priority += 1
+            
+            # 4. Card Component
+            files.append({
+                "filepath": f"components/{feature_slug}/{feature_pascal}Card.tsx",
+                "filename": f"{feature_pascal}Card.tsx",
+                "purpose": f"Display single {feature_name} item",
+                "language": "typescript",
+                "priority": priority,
+                "category": "frontend",
+                "feature": feature_id,
+                "content_hints": [
+                    "Display item details",
+                    "Edit and delete actions",
+                    "Styled with Tailwind"
+                ]
+            })
+            priority += 1
+            
+            # 5. API Route (collection)
+            files.append({
+                "filepath": f"app/api/{feature_slug}/route.ts",
+                "filename": "route.ts",
+                "purpose": f"API: GET all {feature_name}, POST new {feature_name}",
+                "language": "typescript",
+                "priority": priority,
+                "category": "backend",
+                "feature": feature_id,
+                "content_hints": [
+                    "GET: Fetch all items from database",
+                    "POST: Create new item with validation",
+                    "Error handling with proper status codes"
+                ]
+            })
+            priority += 1
+            
+            # 6. API Route (single item)
+            files.append({
+                "filepath": f"app/api/{feature_slug}/[id]/route.ts",
+                "filename": "route.ts",
+                "purpose": f"API: GET/PUT/DELETE single {feature_name}",
+                "language": "typescript",
+                "priority": priority,
+                "category": "backend",
+                "feature": feature_id,
+                "content_hints": [
+                    "GET: Fetch single item by ID",
+                    "PUT: Update item",
+                    "DELETE: Remove item",
+                    "404 handling for missing items"
+                ]
+            })
+            priority += 1
+            
+            # 7. React Hook
+            files.append({
+                "filepath": f"hooks/use{feature_pascal}.ts",
+                "filename": f"use{feature_pascal}.ts",
+                "purpose": f"React hook for {feature_name} CRUD operations",
+                "language": "typescript",
+                "priority": priority,
+                "category": "frontend",
+                "feature": feature_id,
+                "content_hints": [
+                    "Fetch items with loading/error states",
+                    "Create, update, delete mutations",
+                    "Optimistic updates",
+                    "Use SWR or React Query pattern"
+                ]
             })
             priority += 1
         
-        # Documentation
+        # ========================================
+        # DOCKER FILES (For containerized deployment)
+        # ========================================
+        
+        # Get app name for docker-compose service naming
+        app_name = architecture.get("analysis", {}).get("problem_summary", "app")[:20].lower()
+        app_slug = self._to_slug(app_name) or "app"
+        
+        # Dockerfile for Next.js app
+        files.append({
+            "filepath": "Dockerfile",
+            "filename": "Dockerfile",
+            "purpose": "Docker container for the Next.js application",
+            "language": "dockerfile",
+            "priority": priority,
+            "category": "infra",
+            "content_hints": [
+                "Multi-stage build for smaller image",
+                "Use Node 18 alpine as base",
+                "COPY package.json package-lock.json* (NO yarn.lock)",
+                "Install dependencies with npm install --legacy-peer-deps (NOT yarn)",
+                "Build Next.js app with npm run build",
+                "Run with node server.js on port 3000",
+                "NO Prisma - uses pg package directly",
+                "DO NOT use yarn - use npm only"
+            ]
+        })
+        priority += 1
+        
+        # Docker Compose for full stack
+        db_name = database.get("primary", "PostgreSQL").lower()
+        files.append({
+            "filepath": "docker-compose.yml",
+            "filename": "docker-compose.yml",
+            "purpose": "Docker Compose for running app with database",
+            "language": "yaml",
+            "priority": priority,
+            "category": "infra",
+            "content_hints": [
+                "DO NOT include version field (it's obsolete)",
+                f"Service: app (Next.js on port 3000)",
+                f"Service: db ({db_name} on port 5432)",
+                "Volume for database persistence",
+                "Environment variables for DATABASE_URL",
+                "Depends_on with condition: service_healthy",
+                "Health checks for db service",
+                "restart: unless-stopped for both services"
+            ]
+        })
+        priority += 1
+        
+        # .dockerignore
+        files.append({
+            "filepath": ".dockerignore",
+            "filename": ".dockerignore",
+            "purpose": "Files to exclude from Docker build context",
+            "language": "text",
+            "priority": priority,
+            "category": "infra",
+            "content_hints": [
+                "node_modules",
+                ".next",
+                ".git",
+                "*.log",
+                ".env.local"
+            ]
+        })
+        priority += 1
+        
+        # ========================================
+        # README
+        # ========================================
         files.append({
             "filepath": "README.md",
             "filename": "README.md",
-            "purpose": "Project documentation with setup instructions",
+            "purpose": "Project documentation with Docker setup instructions",
             "language": "markdown",
             "priority": priority,
-            "dependencies": [],
-            "category": "docs"
+            "category": "docs",
+            "content_hints": [
+                "Project description",
+                "Docker setup instructions (docker-compose up)",
+                "Environment variables setup",
+                "Database migration commands",
+                "Development vs Production modes"
+            ]
         })
         
         return files
+    
+    def _to_slug(self, name: str) -> str:
+        """Convert a name to URL-friendly slug (kebab-case)"""
+        if not name:
+            return ""
+        # Replace spaces and underscores with hyphens
+        slug = name.lower().replace(" ", "-").replace("_", "-")
+        # Remove any character that's not alphanumeric or hyphen
+        slug = ''.join(c for c in slug if c.isalnum() or c == '-')
+        # Remove multiple consecutive hyphens
+        while '--' in slug:
+            slug = slug.replace('--', '-')
+        # Remove leading/trailing hyphens
+        return slug.strip('-')
+    
+    def _to_pascal_case(self, name: str) -> str:
+        """Convert a name to PascalCase"""
+        if not name:
+            return ""
+        # Split by spaces, hyphens, and underscores
+        words = name.replace('-', ' ').replace('_', ' ').split()
+        # Capitalize each word and join
+        pascal = ''.join(word.capitalize() for word in words)
+        # Remove non-alphanumeric characters
+        return ''.join(c for c in pascal if c.isalnum())
 
 
 class FilePlannerAgent(BaseAgent):
@@ -434,19 +756,18 @@ For **Next.js** projects, ALWAYS include:
 - postcss.config.js (if using Tailwind)
 - tailwind.config.js or tailwind.config.ts (if using Tailwind)
 
-## IMPORTANT: Limit to 25-35 files maximum to avoid rate limits.
+## IMPORTANT: Plan ALL files needed for a complete implementation.
 
 ## Response Format
 
 ```json
 {
-    "total_files": 30,
+    "total_files": 45,
     "files_by_category": {
         "config": 6,
-        "frontend": 10,
-        "backend": 8,
-        "shared": 4,
-        "docs": 2
+        "frontend": 20,
+        "backend": 15,
+        "shared": 4
     },
     "generation_order": [
         {"phase": 1, "description": "Config files", "files": ["package.json", "tsconfig.json"]},
@@ -474,8 +795,8 @@ For **Next.js** projects, ALWAYS include:
 }
 ```
 
-Focus on essential files only. Limit to 25-35 files maximum.
-Skip test files unless specifically requested. Missing files can be added later.
+Plan for a complete, production-ready application. Include all necessary files.
+Ensure all features in the architecture are fully covered with implementation files.
 """
 
     async def process_task(self, task_data: Dict[str, Any]) -> Dict[str, Any]:

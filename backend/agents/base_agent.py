@@ -9,6 +9,7 @@ import structlog
 
 from models.schemas import AgentRole, AgentActivity, LLMUsage
 from utils.gemini_client import get_gemini_client
+from utils.llm_tracker import tracker
 
 logger = structlog.get_logger()
 
@@ -21,14 +22,20 @@ class BaseAgent(ABC):
     - LLM interaction via Gemini
     - Activity tracking
     - MCP server integration
+    - LLM usage tracking per agent
     - Logging
+    
+    Part of Multi-Agent System with MCP Integration:
+    - Agents communicate via MCP protocol
+    - Each agent tracks its own LLM usage
+    - Agents have well-defined roles and responsibilities
     """
 
     def __init__(
         self,
         role: AgentRole,
         mcp_server: Optional[Any] = None,
-        openai_client: Optional[Any] = None  # Legacy parameter, using Gemini
+        openai_client: Optional[Any] = None
     ):
         """
         Initialize the base agent.
@@ -43,8 +50,9 @@ class BaseAgent(ABC):
         self.gemini_client = get_gemini_client()
         self.current_activity: Optional[AgentActivity] = None
         self.activities: List[AgentActivity] = []
+        self.agent_name = self.__class__.__name__
         
-        logger.info("agent_initialized", role=role.value)
+        logger.info("agent_initialized", role=role.value, agent_name=self.agent_name)
 
     @abstractmethod
     def get_system_prompt(self) -> str:
@@ -111,13 +119,24 @@ class BaseAgent(ABC):
                 if not content or content.strip() == "":
                     raise ValueError("Empty response from LLM")
                 
+                usage_info = response.get("usage", {})
+                prompt_tokens = usage_info.get("prompt_tokens", 0)
+                completion_tokens = usage_info.get("completion_tokens", 0)
+                
+                tracker.track_usage(
+                    model=response.get("model", "gemini-2.5-flash"),
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    agent_name=self.agent_name
+                )
+                
                 if self.current_activity:
                     self.current_activity.llm_usage = LLMUsage(
                         model=response.get("model", "gemini-2.5-flash"),
-                        prompt_tokens=response.get("usage", {}).get("prompt_tokens", 0),
-                        completion_tokens=response.get("usage", {}).get("completion_tokens", 0),
-                        total_tokens=response.get("usage", {}).get("total_tokens", 0),
-                        cost=response.get("usage", {}).get("cost", 0.0)
+                        prompt_tokens=prompt_tokens,
+                        completion_tokens=completion_tokens,
+                        total_tokens=usage_info.get("total_tokens", 0),
+                        cost=usage_info.get("cost", 0.0)
                     )
                 
                 return content

@@ -1,18 +1,31 @@
 """
-LLM Usage Tracker - Monitors API calls and token usage
+LLM Usage Tracker - Monitors API calls and token usage by agent
+Enhanced for Multi-Agent System with MCP Integration
 """
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 from datetime import datetime
+from dataclasses import dataclass, field
 import structlog
 from models.schemas import LLMUsage
 
 logger = structlog.get_logger()
 
 
-class LLMTracker:
-    """Tracks LLM API calls and token usage"""
+@dataclass
+class AgentUsage:
+    """Track usage for a single agent"""
+    agent_name: str
+    calls: int = 0
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+    cost: float = 0.0
+    last_call: Optional[datetime] = None
 
-    # Pricing per 1K tokens (as of 2024 - update as needed)
+
+class LLMTracker:
+    """Tracks LLM API calls and token usage by agent"""
+
     PRICING = {
         "gemini-pro": {"prompt": 0.0005, "completion": 0.0015},
         "gemini-1.5-pro": {"prompt": 0.00125, "completion": 0.005},
@@ -23,18 +36,34 @@ class LLMTracker:
         "gemini-ultra": {"prompt": 0.0125, "completion": 0.0375},
     }
 
+    AGENT_DISPLAY_NAMES = {
+        "FeaturePlannerAgent": "Feature Planner",
+        "ArchitectAgent": "Architect",
+        "FilePlannerAgent": "File Planner",
+        "CodeGeneratorAgent": "Code Generator",
+        "CodeReviewerAgent": "Code Reviewer",
+        "IntegrationValidatorAgent": "Validator",
+        "TestingAgent": "Testing",
+        "TestGeneratorAgent": "Test Generator",
+        "ExecutionAgent": "Execution",
+        "unknown": "Unknown Agent"
+    }
+
     def __init__(self):
         self.usage_history: list[LLMUsage] = []
         self.total_calls = 0
         self.total_tokens = 0
         self.total_cost = 0.0
+        self.by_agent: Dict[str, AgentUsage] = {}
+        self.session_start = datetime.utcnow()
 
     def track_usage(
         self,
         model: str,
         prompt_tokens: int,
         completion_tokens: int,
-        response_metadata: Optional[Dict] = None
+        response_metadata: Optional[Dict] = None,
+        agent_name: Optional[str] = None
     ) -> LLMUsage:
         """
         Track a single LLM API call
@@ -44,6 +73,7 @@ class LLMTracker:
             prompt_tokens: Number of prompt tokens
             completion_tokens: Number of completion tokens
             response_metadata: Additional metadata from the API response
+            agent_name: Name of the agent making the call
 
         Returns:
             LLMUsage object with usage details
@@ -64,12 +94,24 @@ class LLMTracker:
         self.total_tokens += total_tokens
         self.total_cost += cost
 
+        agent = agent_name or "unknown"
+        if agent not in self.by_agent:
+            self.by_agent[agent] = AgentUsage(agent_name=agent)
+        
+        self.by_agent[agent].calls += 1
+        self.by_agent[agent].prompt_tokens += prompt_tokens
+        self.by_agent[agent].completion_tokens += completion_tokens
+        self.by_agent[agent].total_tokens += total_tokens
+        self.by_agent[agent].cost += cost
+        self.by_agent[agent].last_call = datetime.utcnow()
+
         logger.info(
             "llm_usage_tracked",
             model=model,
             tokens=total_tokens,
             cost=cost,
-            total_calls=self.total_calls
+            total_calls=self.total_calls,
+            agent=agent
         )
 
         return usage
@@ -81,7 +123,6 @@ class LLMTracker:
         completion_tokens: int
     ) -> float:
         """Calculate cost based on model and token usage"""
-        # Normalize model name
         model_key = model.lower()
         for key in self.PRICING.keys():
             if key in model_key:
@@ -99,13 +140,20 @@ class LLMTracker:
         return round(prompt_cost + completion_cost, 6)
 
     def get_summary(self) -> Dict:
-        """Get summary of all LLM usage"""
+        """Get comprehensive summary of all LLM usage"""
+        session_duration = (datetime.utcnow() - self.session_start).total_seconds()
+        
         return {
             "total_calls": self.total_calls,
             "total_tokens": self.total_tokens,
+            "total_prompt_tokens": sum(u.prompt_tokens for u in self.usage_history),
+            "total_completion_tokens": sum(u.completion_tokens for u in self.usage_history),
             "total_cost": round(self.total_cost, 4),
             "average_tokens_per_call": round(self.total_tokens / max(self.total_calls, 1), 2),
-            "usage_by_model": self._usage_by_model()
+            "session_duration_seconds": round(session_duration, 2),
+            "calls_per_minute": round((self.total_calls / max(session_duration, 1)) * 60, 2),
+            "usage_by_model": self._usage_by_model(),
+            "usage_by_agent": self._usage_by_agent()
         }
 
     def _usage_by_model(self) -> Dict[str, Dict]:
@@ -116,17 +164,69 @@ class LLMTracker:
                 by_model[usage.model] = {
                     "calls": 0,
                     "tokens": 0,
+                    "prompt_tokens": 0,
+                    "completion_tokens": 0,
                     "cost": 0.0
                 }
             by_model[usage.model]["calls"] += 1
             by_model[usage.model]["tokens"] += usage.total_tokens
+            by_model[usage.model]["prompt_tokens"] += usage.prompt_tokens
+            by_model[usage.model]["completion_tokens"] += usage.completion_tokens
             by_model[usage.model]["cost"] += usage.cost or 0.0
 
-        # Round costs
         for model in by_model:
             by_model[model]["cost"] = round(by_model[model]["cost"], 4)
 
         return by_model
+
+    def _usage_by_agent(self) -> Dict[str, Dict]:
+        """Get usage breakdown by agent with display names"""
+        result = {}
+        
+        for agent_name, agent_usage in self.by_agent.items():
+            display_name = self.AGENT_DISPLAY_NAMES.get(agent_name, agent_name)
+            result[display_name] = {
+                "agent_id": agent_name,
+                "calls": agent_usage.calls,
+                "tokens": agent_usage.total_tokens,
+                "prompt_tokens": agent_usage.prompt_tokens,
+                "completion_tokens": agent_usage.completion_tokens,
+                "cost": round(agent_usage.cost, 4),
+                "last_call": agent_usage.last_call.isoformat() if agent_usage.last_call else None,
+                "percentage_of_total": round((agent_usage.calls / max(self.total_calls, 1)) * 100, 1)
+            }
+        
+        return result
+
+    def get_agent_stats(self, agent_name: str) -> Optional[Dict]:
+        """Get usage stats for a specific agent"""
+        if agent_name not in self.by_agent:
+            return None
+        
+        agent_usage = self.by_agent[agent_name]
+        display_name = self.AGENT_DISPLAY_NAMES.get(agent_name, agent_name)
+        
+        return {
+            "display_name": display_name,
+            "calls": agent_usage.calls,
+            "tokens": agent_usage.total_tokens,
+            "prompt_tokens": agent_usage.prompt_tokens,
+            "completion_tokens": agent_usage.completion_tokens,
+            "cost": round(agent_usage.cost, 4),
+            "average_tokens_per_call": round(agent_usage.total_tokens / max(agent_usage.calls, 1), 2)
+        }
+
+    def get_timeline(self) -> List[Dict]:
+        """Get usage timeline for visualization"""
+        timeline = []
+        for i, usage in enumerate(self.usage_history):
+            timeline.append({
+                "index": i + 1,
+                "model": usage.model,
+                "tokens": usage.total_tokens,
+                "cost": usage.cost
+            })
+        return timeline
 
     def reset(self):
         """Reset all tracking data"""
@@ -134,8 +234,9 @@ class LLMTracker:
         self.total_calls = 0
         self.total_tokens = 0
         self.total_cost = 0.0
+        self.by_agent.clear()
+        self.session_start = datetime.utcnow()
         logger.info("llm_tracker_reset")
 
 
-# Global tracker instance
 tracker = LLMTracker()

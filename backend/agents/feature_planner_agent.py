@@ -30,11 +30,9 @@ class FeaturePlannerAgent(BaseAgent):
         )
 
     def get_system_prompt(self) -> str:
-        return """You are a Product Manager expert. Analyze requirements and propose CONCISE feature lists.
+        return """You are a Product Manager expert. Analyze requirements and propose a COMPREHENSIVE feature list.
 
-IMPORTANT: Keep responses SHORT. No verbose descriptions. Maximum 5-7 core features, 3-4 optional.
-
-## Response Format (STRICTLY follow this compact format)
+## Response Format (STRICTLY follow this JSON format)
 
 ```json
 {
@@ -43,15 +41,16 @@ IMPORTANT: Keep responses SHORT. No verbose descriptions. Maximum 5-7 core featu
     "core_features": [
         {
             "name": "Feature Name",
-            "description": "One sentence",
+            "description": "One sentence description",
             "priority": "must-have",
-            "complexity": "medium"
+            "complexity": "medium",
+            "user_story": "As a user, I want to..."
         }
     ],
     "optional_features": [
         {
             "name": "Feature Name",
-            "description": "One sentence",
+            "description": "One sentence description",
             "priority": "nice-to-have",
             "complexity": "low"
         }
@@ -61,15 +60,15 @@ IMPORTANT: Keep responses SHORT. No verbose descriptions. Maximum 5-7 core featu
         "backend": "Node.js or Python",
         "database": "PostgreSQL or MongoDB"
     },
-    "estimated_files": 15,
+    "estimated_files": 25,
     "estimated_complexity": "medium"
 }
 ```
 
-RULES:
-- Keep descriptions to ONE sentence max
-- No acceptance_criteria, no user_stories, no technical_notes
-- Maximum 7 core features, 4 optional features
+## RULES
+- Cover ALL requirements from the user
+- Break down complex requirements into specific features
+- Include user stories for core features
 - Be practical and focused
 """
 
@@ -102,11 +101,11 @@ RULES:
         activity = await self.start_activity("Analyzing requirements and proposing features")
         
         try:
-            prompt = f"""Analyze this requirement and propose a CONCISE feature list:
+            prompt = f"""Analyze this requirement and propose a COMPREHENSIVE feature list:
 
 {problem_statement}
 
-Reply with compact JSON. Max 7 core features, 4 optional. One-sentence descriptions only."""
+Reply with JSON. Cover all requirements."""
 
             response = await self.call_llm(
                 messages=[{"role": "user", "content": prompt}],

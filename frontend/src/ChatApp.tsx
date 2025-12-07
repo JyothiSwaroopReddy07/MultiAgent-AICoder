@@ -5,7 +5,8 @@ import {
   FolderTree, FileCode, ChevronRight, ChevronDown,
   Sparkles, Bot, User, Rocket, ExternalLink,
   RefreshCw, Square, Globe, Terminal, Eye, MonitorPlay,
-  Zap, AlertCircle, Maximize2
+  Zap, AlertCircle, Maximize2, Activity, Cpu, FlaskConical,
+  BarChart3, Users, Layers, DollarSign
 } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
@@ -47,9 +48,43 @@ interface AppExecutionState {
   logs: string[];
   error: string | null;
   projectPath: string | null;
+  fixesApplied: string[];
 }
 
-type ActiveTab = 'editor' | 'preview' | 'console';
+interface AgentInfo {
+  id: string;
+  name: string;
+  icon: string;
+  phase: string;
+  description: string;
+  usage: {
+    calls: number;
+    tokens: number;
+    cost?: number;
+  };
+}
+
+interface UsageStats {
+  total_calls: number;
+  total_tokens: number;
+  total_cost: number;
+}
+
+type ActiveTab = 'editor' | 'preview' | 'console' | 'agents';
+
+const SYMPTOM_TRACKER_DESCRIPTION = `A software application that allows users to track and monitor their symptoms over time, enabling them to identify patterns and potential triggers. Users can log symptoms, severity, duration, and associated factors such as food, stress, or environment to gain insights into their health and make informed decisions.
+
+## Functional Requirements:
+1. User Authentication - Register and login functionality
+2. Symptom Logging - Log symptoms with severity (1-10), duration, date/time
+3. Associated Factors - Track food, stress levels, sleep, weather, medications
+4. Pattern Analysis - Visualize symptom trends over time with charts
+5. Trigger Detection - Identify correlations between factors and symptoms
+6. Symptom History - View and search past symptom entries
+7. Export Data - Download symptom data as CSV/PDF
+8. Reminders - Set reminders to log symptoms
+9. Dashboard - Overview of recent symptoms and insights
+10. Notes - Add detailed notes to symptom entries`;
 
 function ChatApp() {
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -68,7 +103,8 @@ function ChatApp() {
     port: null,
     logs: [],
     error: null,
-    projectPath: null
+    projectPath: null,
+    fixesApplied: []
   });
   
   const [activeTab, setActiveTab] = useState<ActiveTab>('editor');
@@ -76,11 +112,20 @@ function ChatApp() {
   const [previewWindow, setPreviewWindow] = useState<Window | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
   
+  const [agents, setAgents] = useState<AgentInfo[]>([]);
+  const [usageStats, setUsageStats] = useState<UsageStats>({ total_calls: 0, total_tokens: 0, total_cost: 0 });
+  const [activeAgentPhase, setActiveAgentPhase] = useState<string>('');
+  const [testCount, setTestCount] = useState<number>(0);
+  
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const codeScrollRef = useRef<HTMLDivElement>(null);
   const readerRef = useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null);
   const chatInputRef = useRef<HTMLTextAreaElement>(null);
   const logsEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    fetchAgents();
+  }, []);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -107,6 +152,38 @@ function ChatApp() {
     }
   }, [isGenerationComplete, codeFiles.length]);
 
+  const fetchAgents = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/v1/agents`);
+      const data = await response.json();
+      setAgents(data.agents || []);
+      if (data.total_usage) {
+        setUsageStats(data.total_usage);
+      }
+    } catch (error) {
+      console.error('Failed to fetch agents:', error);
+    }
+  };
+
+  const fetchUsage = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/v1/usage`);
+      const data = await response.json();
+      setUsageStats({
+        total_calls: data.total_calls || 0,
+        total_tokens: data.total_tokens || 0,
+        total_cost: data.total_cost || 0
+      });
+    } catch (error) {
+      console.error('Failed to fetch usage:', error);
+    }
+  };
+
+  const loadSymptomTrackerPreset = () => {
+    setInputMessage(SYMPTOM_TRACKER_DESCRIPTION);
+    chatInputRef.current?.focus();
+  };
+
   const openPreviewWindow = useCallback(() => {
     if (appExecution.url) {
       const newWindow = window.open(
@@ -124,8 +201,9 @@ function ChatApp() {
     setAppExecution(prev => ({
       ...prev,
       status: 'starting',
-      logs: ['🚀 Starting application...'],
-      error: null
+      logs: ['🚀 Starting application with auto-fix enabled...'],
+      error: null,
+      fixesApplied: []
     }));
     
     setActiveTab('console');
@@ -173,6 +251,36 @@ function ChatApp() {
                 }));
                 break;
                 
+              case 'fix_applied':
+                setAppExecution(prev => ({
+                  ...prev,
+                  logs: [...prev.logs, data.message],
+                  fixesApplied: [...prev.fixesApplied, ...(data.fixes || [])]
+                }));
+                if (data.root_cause) {
+                  setAppExecution(prev => ({
+                    ...prev,
+                    logs: [...prev.logs, `   📋 Root cause: ${data.root_cause}`]
+                  }));
+                }
+                break;
+                
+              case 'files_updated':
+                if (data.files && Array.isArray(data.files)) {
+                  setCodeFiles(data.files);
+                  if (selectedFile) {
+                    const updatedFile = data.files.find((f: CodeFile) => f.filepath === selectedFile.filepath);
+                    if (updatedFile) {
+                      setSelectedFile(updatedFile);
+                    }
+                  }
+                }
+                setAppExecution(prev => ({
+                  ...prev,
+                  logs: [...prev.logs, `📝 Files updated with fixes`]
+                }));
+                break;
+                
               case 'started':
                 setAppExecution(prev => ({
                   ...prev,
@@ -182,6 +290,9 @@ function ChatApp() {
                   projectPath: data.project_path,
                   logs: [...prev.logs, `✅ Application running at ${data.url}`]
                 }));
+                if (data.files && Array.isArray(data.files)) {
+                  setCodeFiles(data.files);
+                }
                 setActiveTab('preview');
                 break;
                 
@@ -192,6 +303,14 @@ function ChatApp() {
                   error: data.message,
                   logs: [...prev.logs, `❌ Error: ${data.message}`]
                 }));
+                if (data.error_history && Array.isArray(data.error_history)) {
+                  data.error_history.forEach((err: string) => {
+                    setAppExecution(prev => ({
+                      ...prev,
+                      logs: [...prev.logs, `   └─ ${err.substring(0, 100)}...`]
+                    }));
+                  });
+                }
                 break;
             }
           } catch (e) {
@@ -207,7 +326,7 @@ function ChatApp() {
         logs: [...prev.logs, `❌ Error: ${error.message}`]
       }));
     }
-  }, [codeFiles, conversationId]);
+  }, [codeFiles, conversationId, selectedFile]);
 
   const stopApplication = useCallback(async () => {
     if (!appExecution.projectPath) return;
@@ -240,6 +359,7 @@ function ChatApp() {
 
     setIsGenerationComplete(false);
     setShowExecuteButton(false);
+    setTestCount(0);
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -304,6 +424,7 @@ function ChatApp() {
               case 'phase_change':
                 const phaseMsg = `\n🔄 ${data.data.message}\n\n`;
                 assistantMessage += phaseMsg;
+                setActiveAgentPhase(data.data.phase || '');
                 setMessages(prev => prev.map(msg => 
                   msg.id === streamingMessageId 
                     ? { ...msg, content: assistantMessage }
@@ -333,7 +454,10 @@ function ChatApp() {
                 if (!selectedFile) {
                   setSelectedFile(file);
                 }
-                const fileMsg = `\n✅ Generated: \`${file.filename}\`\n`;
+                const isTestFile = file.filepath?.includes('test') || file.test_type;
+                const fileMsg = isTestFile
+                  ? `\n🧪 Generated test: \`${file.filename}\`\n`
+                  : `\n✅ Generated: \`${file.filename}\`\n`;
                 assistantMessage += fileMsg;
                 setMessages(prev => prev.map(msg => 
                   msg.id === streamingMessageId 
@@ -345,6 +469,17 @@ function ChatApp() {
                 }
                 break;
 
+              case 'tests_generated':
+                const testData = data.data;
+                setTestCount(testData.test_count || 0);
+                assistantMessage += `\n🧪 ${testData.message}\n`;
+                setMessages(prev => prev.map(msg => 
+                  msg.id === streamingMessageId 
+                    ? { ...msg, content: assistantMessage }
+                    : msg
+                ));
+                break;
+
               case 'code_generated':
                 assistantMessage += `\n${data.data.message}\n`;
                 const files = data.data.files || [];
@@ -354,12 +489,21 @@ function ChatApp() {
                     setSelectedFile(files[0]);
                   }
                 }
+                if (data.data.usage) {
+                  setUsageStats({
+                    total_calls: data.data.usage.total_calls || 0,
+                    total_tokens: data.data.usage.total_tokens || 0,
+                    total_cost: data.data.usage.total_cost || 0
+                  });
+                }
                 setMessages(prev => prev.map(msg => 
                   msg.id === streamingMessageId 
                     ? { ...msg, content: assistantMessage }
                     : msg
                 ));
                 setIsGenerationComplete(true);
+                setActiveAgentPhase('');
+                fetchAgents();
                 break;
 
               case 'message_end':
@@ -468,6 +612,7 @@ function ChatApp() {
   const renderTreeNode = (node: FileNode, depth: number = 0): React.ReactNode => {
     const isExpanded = expandedFolders.has(node.path);
     const isSelected = selectedFile?.filepath === node.path;
+    const isTestFile = node.name.includes('test') || node.name.includes('spec');
 
     if (node.type === 'folder') {
       return (
@@ -502,8 +647,14 @@ function ChatApp() {
         style={{ paddingLeft: `${depth * 12 + 24}px` }}
         onClick={() => file && setSelectedFile(file)}
       >
-        <FileCode size={14} className="text-gray-400" />
-        <span className="text-xs text-gray-300 truncate">{node.name}</span>
+        {isTestFile ? (
+          <FlaskConical size={14} className="text-emerald-400" />
+        ) : (
+          <FileCode size={14} className="text-gray-400" />
+        )}
+        <span className={`text-xs truncate ${isTestFile ? 'text-emerald-300' : 'text-gray-300'}`}>
+          {node.name}
+        </span>
       </div>
     );
   };
@@ -511,24 +662,43 @@ function ChatApp() {
   const tree = codeFiles.length > 0 ? buildTree(codeFiles) : null;
 
   const downloadSourceCode = useCallback(async () => {
-    if (codeFiles.length === 0) return;
+    if (codeFiles.length === 0) {
+      console.warn('No files to download');
+      return;
+    }
     
     setIsDownloading(true);
     try {
+      console.log(`Downloading ${codeFiles.length} files...`);
+      
       const response = await fetch(`${API_URL}/api/download`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          files: codeFiles
+          files: codeFiles.map(f => ({
+            filepath: f.filepath,
+            content: f.content
+          }))
         })
       });
       
-      if (!response.ok) throw new Error('Download failed');
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Download failed: ${response.status} - ${errorText}`);
+      }
       
       const blob = await response.blob();
+      
+      if (blob.size === 0) {
+        throw new Error('Downloaded file is empty');
+      }
+      
+      console.log(`Downloaded blob size: ${blob.size} bytes`);
+      
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
+      a.style.display = 'none';
       
       const contentDisposition = response.headers.get('Content-Disposition');
       let filename = 'source-code.zip';
@@ -540,19 +710,137 @@ function ChatApp() {
       a.download = filename;
       document.body.appendChild(a);
       a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+      
+      setTimeout(() => {
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      }, 100);
+      
+      console.log(`Download initiated: ${filename}`);
     } catch (error) {
       console.error('Download error:', error);
+      alert(`Download failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsDownloading(false);
     }
   }, [codeFiles]);
 
+  const renderAgentsPanel = () => {
+    const getPhaseIcon = (phase: string) => {
+      switch (phase) {
+        case 'planning': return '💡';
+        case 'discovery': return '🏗️';
+        case 'design': return '📋';
+        case 'implementation': return '⚙️';
+        case 'validation': return '🔍';
+        case 'testing': return '🧪';
+        case 'execution': return '🚀';
+        default: return '🤖';
+      }
+    };
+
+    return (
+      <div className="flex-1 flex flex-col bg-gray-900 p-4 overflow-y-auto">
+        <div className="mb-6">
+          <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+            <Users size={20} className="text-cyan-400" />
+            Multi-Agent System
+          </h3>
+          <p className="text-sm text-gray-400 mb-4">
+            Agents communicate via Model Context Protocol (MCP) for coordinated code generation.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+          <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+            <div className="flex items-center gap-2 mb-2">
+              <Activity size={16} className="text-emerald-400" />
+              <span className="text-sm font-semibold text-white">API Calls</span>
+            </div>
+            <div className="text-2xl font-bold text-emerald-400">{usageStats.total_calls}</div>
+          </div>
+          
+          <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+            <div className="flex items-center gap-2 mb-2">
+              <Cpu size={16} className="text-blue-400" />
+              <span className="text-sm font-semibold text-white">Total Tokens</span>
+            </div>
+            <div className="text-2xl font-bold text-blue-400">{usageStats.total_tokens.toLocaleString()}</div>
+          </div>
+          
+          <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+            <div className="flex items-center gap-2 mb-2">
+              <DollarSign size={16} className="text-yellow-400" />
+              <span className="text-sm font-semibold text-white">Estimated Cost</span>
+            </div>
+            <div className="text-2xl font-bold text-yellow-400">${usageStats.total_cost.toFixed(4)}</div>
+          </div>
+          
+          <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+            <div className="flex items-center gap-2 mb-2">
+              <FlaskConical size={16} className="text-violet-400" />
+              <span className="text-sm font-semibold text-white">Test Files</span>
+            </div>
+            <div className="text-2xl font-bold text-violet-400">{testCount}</div>
+          </div>
+        </div>
+
+        <h4 className="text-sm font-semibold text-gray-400 mb-3 flex items-center gap-2">
+          <Layers size={14} />
+          AGENT PIPELINE
+        </h4>
+        
+        <div className="space-y-2">
+          {agents.map((agent, index) => {
+            const isActive = activeAgentPhase === agent.phase;
+            return (
+              <div
+                key={agent.id}
+                className={`bg-gray-800 rounded-lg p-3 border transition-all ${
+                  isActive 
+                    ? 'border-cyan-500 shadow-lg shadow-cyan-500/20' 
+                    : 'border-gray-700 hover:border-gray-600'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="text-xl">{agent.icon || getPhaseIcon(agent.phase)}</span>
+                    <div>
+                      <div className="text-sm font-medium text-white flex items-center gap-2">
+                        {agent.name}
+                        {isActive && (
+                          <Loader2 size={14} className="animate-spin text-cyan-400" />
+                        )}
+                      </div>
+                      <div className="text-xs text-gray-500">{agent.description}</div>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs text-gray-400">
+                      {agent.usage?.calls || 0} calls
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      {(agent.usage?.tokens || 0).toLocaleString()} tokens
+                    </div>
+                  </div>
+                </div>
+                {index < agents.length - 1 && (
+                  <div className="flex justify-center mt-2">
+                    <ChevronDown size={14} className="text-gray-600" />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   const renderExecuteButton = () => {
     if (!showExecuteButton) return null;
 
-    return (
+  return (
       <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 z-50 animate-bounce-in flex gap-4">
         <button
           onClick={executeApplication}
@@ -592,31 +880,49 @@ function ChatApp() {
 
   const renderTabContent = () => {
     switch (activeTab) {
+      case 'agents':
+        return renderAgentsPanel();
+
       case 'preview':
         return (
           <div className="flex-1 flex flex-col bg-gray-900">
             {appExecution.status === 'running' && appExecution.url ? (
               <>
-                <div className="bg-gray-800 border-b border-gray-700 px-4 py-3 flex items-center justify-between shrink-0">
+                <div className="bg-gray-800 border-b border-gray-700 px-4 py-2 flex items-center justify-between shrink-0">
                   <div className="flex items-center gap-3">
                     <div className="flex gap-1.5">
-                      <div className="w-3 h-3 rounded-full bg-red-500" />
+                      <div className="w-3 h-3 rounded-full bg-red-500 cursor-pointer" onClick={stopApplication} title="Stop" />
                       <div className="w-3 h-3 rounded-full bg-yellow-500" />
-                      <div className="w-3 h-3 rounded-full bg-green-500" />
+                      <div className="w-3 h-3 rounded-full bg-green-500 animate-pulse" />
                     </div>
                     <div className="flex items-center gap-2 bg-gray-700 rounded-lg px-3 py-1.5">
                       <Globe size={14} className="text-green-400" />
                       <span className="text-sm text-gray-300 font-mono">{appExecution.url}</span>
                     </div>
+                    {appExecution.fixesApplied.length > 0 && (
+                      <span className="badge-purple text-xs flex items-center gap-1">
+                        <Zap size={12} />
+                        {appExecution.fixesApplied.length} fixes applied
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     <button
+                      onClick={() => {
+                        const iframe = document.getElementById('preview-iframe') as HTMLIFrameElement;
+                        if (iframe) iframe.src = iframe.src;
+                      }}
+                      className="p-2 hover:bg-gray-700 rounded-lg transition-colors"
+                      title="Refresh preview"
+                    >
+                      <RefreshCw size={16} className="text-gray-400 hover:text-white" />
+                    </button>
+                    <button
                       onClick={openPreviewWindow}
-                      className="btn-primary flex items-center gap-2 text-sm"
+                      className="p-2 hover:bg-gray-700 rounded-lg transition-colors"
                       title="Open in new window"
                     >
-                      <Maximize2 size={16} />
-                      Open App
+                      <Maximize2 size={16} className="text-gray-400 hover:text-white" />
                     </button>
                     <a
                       href={appExecution.url}
@@ -625,48 +931,37 @@ function ChatApp() {
                       className="p-2 hover:bg-gray-700 rounded-lg transition-colors"
                       title="Open in browser tab"
                     >
-                      <ExternalLink size={18} className="text-gray-400 hover:text-white" />
+                      <ExternalLink size={16} className="text-gray-400 hover:text-white" />
                     </a>
                     <button
                       onClick={stopApplication}
                       className="p-2 hover:bg-red-600/20 rounded-lg transition-colors"
                       title="Stop application"
                     >
-                      <Square size={18} className="text-red-400 hover:text-red-300" />
+                      <Square size={16} className="text-red-400 hover:text-red-300" />
                     </button>
                   </div>
                 </div>
                 
-                <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-gray-800 to-gray-900 p-8">
-                  <div className="text-center max-w-lg">
-                    <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center shadow-lg shadow-emerald-500/30">
-                      <Globe size={40} className="text-white" />
-                    </div>
-                    <h3 className="text-2xl font-bold text-white mb-3">
-                      Application Running!
-                    </h3>
-                    <p className="text-gray-400 mb-6">
-                      Your generated application is now running at:
-                    </p>
-                    <div className="bg-gray-800 rounded-xl p-4 mb-6 border border-gray-700">
-                      <code className="text-emerald-400 text-lg font-mono">{appExecution.url}</code>
-                    </div>
-                    <div className="flex flex-col gap-3">
-                      <button
-                        onClick={openPreviewWindow}
-                        className="btn-execute w-full flex items-center justify-center gap-3"
-                      >
-                        <Maximize2 size={20} />
-                        <span>Open in New Window</span>
-                      </button>
+                <div className="flex-1 bg-white relative">
+                  <iframe
+                    id="preview-iframe"
+                    src={appExecution.url}
+                    className="w-full h-full border-0"
+                    title="Application Preview"
+                    sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
+                  />
+                  <div className="absolute inset-0 flex items-center justify-center bg-gray-900/90 opacity-0 hover:opacity-100 transition-opacity pointer-events-none">
+                    <div className="text-center pointer-events-auto">
+                      <p className="text-gray-400 text-sm mb-3">Preview not loading?</p>
                       <a
                         href={appExecution.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="btn-secondary w-full flex items-center justify-center gap-3"
+                        className="btn-primary inline-flex items-center gap-2"
                       >
-                        <ExternalLink size={20} />
-                        <span>Open in Browser Tab</span>
+                        <ExternalLink size={16} />
+                        Open in New Tab
                       </a>
                     </div>
                   </div>
@@ -679,19 +974,32 @@ function ChatApp() {
                     <>
                       <Loader2 size={48} className="mx-auto mb-4 text-emerald-400 animate-spin" />
                       <h3 className="text-lg font-semibold text-white mb-2">Starting Application...</h3>
-                      <p className="text-sm text-gray-400">Installing dependencies and starting the server</p>
+                      <p className="text-sm text-gray-400 mb-4">Installing dependencies and starting the server</p>
+                      {appExecution.fixesApplied.length > 0 && (
+                        <div className="bg-violet-500/20 border border-violet-500/30 rounded-lg p-3 max-w-md mx-auto">
+                          <p className="text-violet-300 text-sm flex items-center gap-2 justify-center">
+                            <Zap size={16} />
+                            Auto-fixed {appExecution.fixesApplied.length} issue(s)
+                          </p>
+                        </div>
+                      )}
                     </>
                   ) : appExecution.status === 'error' ? (
                     <>
                       <AlertCircle size={48} className="mx-auto mb-4 text-red-400" />
                       <h3 className="text-lg font-semibold text-white mb-2">Failed to Start</h3>
-                      <p className="text-sm text-red-400 max-w-md">{appExecution.error}</p>
+                      <p className="text-sm text-red-400 max-w-md mb-4">{appExecution.error}</p>
+                      {appExecution.fixesApplied.length > 0 && (
+                        <p className="text-sm text-gray-400 mb-4">
+                          Tried {appExecution.fixesApplied.length} automatic fix(es) but couldn't resolve all issues.
+                        </p>
+                      )}
                       <button
                         onClick={executeApplication}
-                        className="mt-4 btn-primary flex items-center gap-2 mx-auto"
+                        className="mt-2 btn-primary flex items-center gap-2 mx-auto"
                       >
                         <RefreshCw size={16} />
-                        Retry
+                        Retry with Auto-Fix
                       </button>
                     </>
                   ) : (
@@ -729,7 +1037,11 @@ function ChatApp() {
                     log.includes('📦') ? 'text-yellow-400' :
                     log.includes('📁') ? 'text-cyan-400' :
                     log.includes('💾') ? 'text-purple-400' :
+                    log.includes('🔧') ? 'text-violet-400 font-medium' :
+                    log.includes('📋') ? 'text-violet-300 pl-4' :
+                    log.includes('📝') ? 'text-teal-400' :
                     log.includes('⚠️') ? 'text-orange-400' :
+                    log.includes('└─') ? 'text-gray-500 text-xs pl-4' :
                     'text-gray-300'
                   }`}>
                     {log}
@@ -748,7 +1060,11 @@ function ChatApp() {
               <>
                 <div className="bg-gray-800 border-b border-gray-700 px-4 py-2 flex items-center justify-between shrink-0">
                   <div className="flex items-center gap-2">
-                    <Code size={16} className="text-violet-400" />
+                    {selectedFile.filepath.includes('test') ? (
+                      <FlaskConical size={16} className="text-emerald-400" />
+                    ) : (
+                      <Code size={16} className="text-violet-400" />
+                    )}
                     <span className="text-sm text-white font-medium">{selectedFile.filename}</span>
                   </div>
                   <span className="text-xs text-gray-400 badge-purple">{selectedFile.language.toUpperCase()}</span>
@@ -812,29 +1128,34 @@ function ChatApp() {
                   AI Code Generator
                 </h1>
                 <p className="text-xs text-gray-400">
-                  Enterprise Multi-Agent Platform
+                  Multi-Agent System with MCP Integration
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-3">
+              {usageStats.total_calls > 0 && (
+                <span className="badge-cyan text-xs flex items-center gap-1">
+                  <Activity size={12} />
+                  {usageStats.total_calls} API calls
+                </span>
+              )}
               {appExecution.status === 'running' && (
                 <span className="badge-green flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                   App Running
                 </span>
               )}
-              {conversationId && (
+            {conversationId && (
                 <span className="badge-cyan text-xs">
-                  Session Active
-                </span>
-              )}
+                Session Active
+              </span>
+            )}
             </div>
           </div>
         </div>
       </header>
 
       <div className="flex-1 flex overflow-hidden relative min-h-0">
-        {/* Chat Panel - Cyan Scrollbar */}
         <div className="w-full md:w-[35%] lg:w-[30%] glass-dark border-r border-gray-700/50 flex flex-col min-h-0">
           <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0 scrollbar scrollbar-w-3 scrollbar-thumb-cyan-500 scrollbar-track-gray-800/50 hover:scrollbar-thumb-cyan-400">
             {messages.length === 0 && (
@@ -843,9 +1164,17 @@ function ChatApp() {
                 <h3 className="text-base font-semibold text-white mb-2">
                   Let's Build Something Amazing!
                 </h3>
-                <p className="text-sm text-gray-400 px-4">
-                  Describe your application idea, and I'll help you build it.
+                <p className="text-sm text-gray-400 px-4 mb-4">
+                  Describe your application idea, and our multi-agent system will help you build it.
                 </p>
+                
+                <button
+                  onClick={loadSymptomTrackerPreset}
+                  className="mt-4 px-4 py-2 bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 rounded-lg text-sm text-emerald-300 transition-all flex items-center gap-2 mx-auto"
+                >
+                  <Zap size={14} />
+                  Try: Symptom Tracker App
+                </button>
               </div>
             )}
             
@@ -958,7 +1287,6 @@ function ChatApp() {
           </div>
         </div>
 
-        {/* Code Panel */}
         <div className="flex-1 flex flex-col bg-gray-900 min-h-0">
           {codeFiles.length > 0 ? (
             <>
@@ -970,7 +1298,7 @@ function ChatApp() {
                   <div className="flex items-center gap-2">
                     <Code size={14} />
                     <span>Editor</span>
-                  </div>
+                    </div>
                 </button>
                 <button
                   onClick={() => setActiveTab('preview')}
@@ -998,8 +1326,22 @@ function ChatApp() {
                     )}
                   </div>
                 </button>
+                <button
+                  onClick={() => { setActiveTab('agents'); fetchAgents(); }}
+                  className={activeTab === 'agents' ? 'tab-active' : 'tab-inactive'}
+                >
+                  <div className="flex items-center gap-2">
+                    <BarChart3 size={14} />
+                    <span>Agents</span>
+                    {usageStats.total_calls > 0 && (
+                      <span className="text-[10px] badge bg-cyan-600 text-white">
+                        {usageStats.total_calls}
+                      </span>
+                    )}
+                  </div>
+                </button>
               </div>
-
+                      
               <div className="flex flex-1 min-h-0">
                 {activeTab === 'editor' && (
                   <div className="w-56 glass-dark border-r border-gray-700/50 flex flex-col min-h-0">
@@ -1010,12 +1352,11 @@ function ChatApp() {
                         <span className="ml-auto badge-purple text-[10px]">{codeFiles.length}</span>
                       </div>
                     </div>
-                    {/* File Tree - Gray Scrollbar */}
                     <div ref={codeScrollRef} className="flex-1 overflow-y-auto min-h-0 scrollbar scrollbar-w-2 scrollbar-thumb-gray-600 scrollbar-track-transparent hover:scrollbar-thumb-gray-500">
                       {tree && tree.children && tree.children.map(child => renderTreeNode(child, 0))}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
 
                 <div className="flex-1 flex flex-col min-h-0">
                   {renderTabContent()}
@@ -1029,9 +1370,17 @@ function ChatApp() {
                 <h3 className="text-lg font-semibold text-gray-400 mb-2">
                   No Code Yet
                 </h3>
-                <p className="text-sm text-gray-500 max-w-md">
+                <p className="text-sm text-gray-500 max-w-md mb-6">
                   Start chatting to generate your application!
                 </p>
+                
+                <button
+                  onClick={loadSymptomTrackerPreset}
+                  className="px-4 py-2 bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 rounded-lg text-sm text-emerald-300 transition-all flex items-center gap-2 mx-auto"
+                >
+                  <Zap size={14} />
+                  Try Demo: Symptom Tracker App
+                </button>
               </div>
             </div>
           )}
