@@ -140,6 +140,10 @@ Start directly with import statements.
                     continue
             
             config_files = self._generate_test_config()
+            package_updates = self.get_package_json_updates()
+            
+            # Update package.json in generated_files if it exists
+            updated_files = self._update_package_json(generated_files, package_updates)
             
             await self.complete_activity("completed")
             
@@ -152,6 +156,8 @@ Start directly with import statements.
             return {
                 "test_files": test_files,
                 "config_files": config_files,
+                "updated_files": updated_files,
+                "package_updates": package_updates,
                 "summary": {
                     "total_test_files": len(test_files),
                     "source_files_tested": len(testable_files),
@@ -159,6 +165,58 @@ Start directly with import statements.
                 },
                 "activity": self.current_activity.model_dump() if self.current_activity else None
             }
+            
+        except Exception as e:
+            await self.complete_activity("failed")
+            logger.error("unit_test_generation_failed", agent=self.agent_name, error=str(e))
+            raise
+    
+    def _update_package_json(
+        self,
+        files: List[Dict[str, Any]],
+        updates: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
+        """Update package.json with Jest dependencies and test script"""
+        import json
+        
+        updated_files = []
+        
+        for f in files:
+            if f.get("filepath") == "package.json":
+                try:
+                    content = f.get("content", "{}")
+                    pkg = json.loads(content)
+                    
+                    # Update scripts
+                    if "scripts" not in pkg:
+                        pkg["scripts"] = {}
+                    pkg["scripts"]["test"] = updates["scripts"]["test"]
+                    pkg["scripts"]["test:watch"] = updates["scripts"]["test:watch"]
+                    pkg["scripts"]["test:coverage"] = updates["scripts"]["test:coverage"]
+                    
+                    # Update devDependencies
+                    if "devDependencies" not in pkg:
+                        pkg["devDependencies"] = {}
+                    for dep, version in updates["devDependencies"].items():
+                        if dep not in pkg["devDependencies"]:
+                            pkg["devDependencies"][dep] = version
+                    
+                    updated_file = {
+                        **f,
+                        "content": json.dumps(pkg, indent=2)
+                    }
+                    updated_files.append(updated_file)
+                    
+                    logger.info("package_json_updated_with_jest", 
+                              scripts=list(updates["scripts"].keys()),
+                              deps=list(updates["devDependencies"].keys()))
+                except json.JSONDecodeError as e:
+                    logger.warning("package_json_parse_error", error=str(e))
+                    updated_files.append(f)
+            else:
+                updated_files.append(f)
+        
+        return updated_files
             
         except Exception as e:
             await self.complete_activity("failed")
@@ -315,6 +373,23 @@ beforeEach(() => {
         }
         
         return [jest_config, jest_setup]
+    
+    def get_package_json_updates(self) -> Dict[str, Any]:
+        """Return the necessary package.json updates for Jest testing"""
+        return {
+            "scripts": {
+                "test": "jest",
+                "test:watch": "jest --watch",
+                "test:coverage": "jest --coverage"
+            },
+            "devDependencies": {
+                "jest": "^29.7.0",
+                "jest-environment-jsdom": "^29.7.0",
+                "@testing-library/react": "^14.1.0",
+                "@testing-library/jest-dom": "^6.1.0",
+                "@types/jest": "^29.5.0"
+            }
+        }
 
 
 class TestReportAgent(BaseAgent):

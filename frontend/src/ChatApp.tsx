@@ -68,6 +68,19 @@ interface UsageStats {
   total_calls: number;
   total_tokens: number;
   total_cost: number;
+  total_prompt_tokens?: number;
+  total_completion_tokens?: number;
+  usage_by_agent?: {
+    [key: string]: {
+      agent_id: string;
+      calls: number;
+      tokens: number;
+      prompt_tokens: number;
+      completion_tokens: number;
+      cost: number;
+      percentage_of_total?: number;
+    };
+  };
 }
 
 type ActiveTab = 'editor' | 'preview' | 'console' | 'agents';
@@ -172,12 +185,45 @@ function ChatApp() {
       setUsageStats({
         total_calls: data.total_calls || 0,
         total_tokens: data.total_tokens || 0,
-        total_cost: data.total_cost || 0
+        total_cost: data.total_cost || 0,
+        total_prompt_tokens: data.total_prompt_tokens || 0,
+        total_completion_tokens: data.total_completion_tokens || 0,
+        usage_by_agent: data.usage_by_agent || {}
       });
     } catch (error) {
       console.error('Failed to fetch usage:', error);
     }
   };
+
+  const stopExecution = useCallback(async () => {
+    if (appExecution.status !== 'starting' && appExecution.status !== 'running') return;
+    
+    try {
+      // Try to stop via API
+      if (appExecution.projectPath) {
+        await fetch(`${API_URL}/api/execute/stop`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            project_path: appExecution.projectPath
+          })
+        });
+      }
+      
+      setAppExecution(prev => ({
+        ...prev,
+        status: 'stopped',
+        logs: [...prev.logs, '🛑 Execution stopped by user']
+      }));
+    } catch (error: any) {
+      console.error('Failed to stop execution:', error);
+      setAppExecution(prev => ({
+        ...prev,
+        status: 'stopped',
+        logs: [...prev.logs, '🛑 Execution stopped']
+      }));
+    }
+  }, [appExecution.status, appExecution.projectPath]);
 
   const loadSymptomTrackerPreset = () => {
     setInputMessage(SYMPTOM_TRACKER_DESCRIPTION);
@@ -739,6 +785,11 @@ function ChatApp() {
       }
     };
 
+    const usageByAgent = usageStats.usage_by_agent || {};
+    const agentUsageList = Object.entries(usageByAgent)
+      .map(([displayName, data]) => ({ displayName, ...data }))
+      .sort((a, b) => b.tokens - a.tokens);
+
     return (
       <div className="flex-1 flex flex-col bg-gray-900 p-4 overflow-y-auto">
         <div className="mb-6">
@@ -751,39 +802,120 @@ function ChatApp() {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-          <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
-            <div className="flex items-center gap-2 mb-2">
-              <Activity size={16} className="text-emerald-400" />
-              <span className="text-sm font-semibold text-white">API Calls</span>
+        {/* Main Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+          <div className="bg-gray-800 rounded-lg p-3 border border-gray-700">
+            <div className="flex items-center gap-2 mb-1">
+              <Activity size={14} className="text-emerald-400" />
+              <span className="text-xs font-medium text-gray-400">API Calls</span>
             </div>
-            <div className="text-2xl font-bold text-emerald-400">{usageStats.total_calls}</div>
+            <div className="text-xl font-bold text-emerald-400">{usageStats.total_calls}</div>
           </div>
           
-          <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
-            <div className="flex items-center gap-2 mb-2">
-              <Cpu size={16} className="text-blue-400" />
-              <span className="text-sm font-semibold text-white">Total Tokens</span>
+          <div className="bg-gray-800 rounded-lg p-3 border border-gray-700">
+            <div className="flex items-center gap-2 mb-1">
+              <Cpu size={14} className="text-blue-400" />
+              <span className="text-xs font-medium text-gray-400">Total Tokens</span>
             </div>
-            <div className="text-2xl font-bold text-blue-400">{usageStats.total_tokens.toLocaleString()}</div>
+            <div className="text-xl font-bold text-blue-400">{usageStats.total_tokens.toLocaleString()}</div>
           </div>
           
-          <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
-            <div className="flex items-center gap-2 mb-2">
-              <DollarSign size={16} className="text-yellow-400" />
-              <span className="text-sm font-semibold text-white">Estimated Cost</span>
+          <div className="bg-gray-800 rounded-lg p-3 border border-gray-700">
+            <div className="flex items-center gap-2 mb-1">
+              <DollarSign size={14} className="text-yellow-400" />
+              <span className="text-xs font-medium text-gray-400">Est. Cost</span>
             </div>
-            <div className="text-2xl font-bold text-yellow-400">${usageStats.total_cost.toFixed(4)}</div>
+            <div className="text-xl font-bold text-yellow-400">${usageStats.total_cost.toFixed(4)}</div>
           </div>
           
-          <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
-            <div className="flex items-center gap-2 mb-2">
-              <FlaskConical size={16} className="text-violet-400" />
-              <span className="text-sm font-semibold text-white">Test Files</span>
+          <div className="bg-gray-800 rounded-lg p-3 border border-gray-700">
+            <div className="flex items-center gap-2 mb-1">
+              <FlaskConical size={14} className="text-violet-400" />
+              <span className="text-xs font-medium text-gray-400">Tests</span>
             </div>
-            <div className="text-2xl font-bold text-violet-400">{testCount}</div>
+            <div className="text-xl font-bold text-violet-400">{testCount}</div>
           </div>
         </div>
+
+        {/* Token Breakdown */}
+        {(usageStats.total_prompt_tokens || usageStats.total_completion_tokens) && (
+          <div className="bg-gray-800 rounded-lg p-4 border border-gray-700 mb-6">
+            <h4 className="text-sm font-semibold text-gray-300 mb-3">Token Breakdown</h4>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <div className="text-xs text-gray-500 mb-1">Input Tokens</div>
+                <div className="text-lg font-semibold text-cyan-400">
+                  {(usageStats.total_prompt_tokens || 0).toLocaleString()}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-gray-500 mb-1">Output Tokens</div>
+                <div className="text-lg font-semibold text-pink-400">
+                  {(usageStats.total_completion_tokens || 0).toLocaleString()}
+                </div>
+              </div>
+            </div>
+            <div className="mt-3 h-2 bg-gray-700 rounded-full overflow-hidden">
+              <div 
+                className="h-full bg-gradient-to-r from-cyan-500 to-pink-500"
+                style={{ 
+                  width: `${((usageStats.total_prompt_tokens || 0) / (usageStats.total_tokens || 1)) * 100}%` 
+                }}
+              />
+            </div>
+            <div className="flex justify-between text-xs text-gray-500 mt-1">
+              <span>Input: {((usageStats.total_prompt_tokens || 0) / (usageStats.total_tokens || 1) * 100).toFixed(1)}%</span>
+              <span>Output: {((usageStats.total_completion_tokens || 0) / (usageStats.total_tokens || 1) * 100).toFixed(1)}%</span>
+            </div>
+          </div>
+        )}
+
+        {/* Usage by Agent */}
+        {agentUsageList.length > 0 && (
+          <div className="mb-6">
+            <h4 className="text-sm font-semibold text-gray-400 mb-3 flex items-center gap-2">
+              <BarChart3 size={14} />
+              USAGE BY AGENT
+            </h4>
+            <div className="space-y-2">
+              {agentUsageList.map((agentUsage) => (
+                <div key={agentUsage.displayName} className="bg-gray-800 rounded-lg p-3 border border-gray-700">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-white">{agentUsage.displayName}</span>
+                      {agentUsage.percentage_of_total && (
+                        <span className="text-xs text-gray-500">({agentUsage.percentage_of_total}%)</span>
+                      )}
+                    </div>
+                    <span className="text-xs text-gray-400">{agentUsage.calls} calls</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    <div>
+                      <div className="text-gray-500">Input</div>
+                      <div className="text-cyan-400 font-medium">{agentUsage.prompt_tokens.toLocaleString()}</div>
+                    </div>
+                    <div>
+                      <div className="text-gray-500">Output</div>
+                      <div className="text-pink-400 font-medium">{agentUsage.completion_tokens.toLocaleString()}</div>
+                    </div>
+                    <div>
+                      <div className="text-gray-500">Cost</div>
+                      <div className="text-yellow-400 font-medium">${agentUsage.cost.toFixed(4)}</div>
+                    </div>
+                  </div>
+                  <div className="mt-2 h-1.5 bg-gray-700 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-gradient-to-r from-cyan-500 to-blue-500"
+                      style={{ 
+                        width: `${(agentUsage.tokens / (usageStats.total_tokens || 1)) * 100}%` 
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <h4 className="text-sm font-semibold text-gray-400 mb-3 flex items-center gap-2">
           <Layers size={14} />
@@ -833,11 +965,37 @@ function ChatApp() {
             );
           })}
         </div>
+
+        {/* Refresh Button */}
+        <div className="mt-6 text-center">
+          <button
+            onClick={() => { fetchAgents(); fetchUsage(); }}
+            className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-sm transition-colors flex items-center gap-2 mx-auto"
+          >
+            <RefreshCw size={14} />
+            Refresh Stats
+          </button>
+        </div>
       </div>
     );
   };
 
   const renderExecuteButton = () => {
+    // Show stop button during execution
+    if (appExecution.status === 'starting') {
+      return (
+        <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 z-50 animate-bounce-in flex gap-4">
+          <button
+            onClick={stopExecution}
+            className="px-6 py-3 bg-red-600 hover:bg-red-500 text-white rounded-full font-semibold transition-all transform hover:scale-105 active:scale-95 flex items-center gap-3 shadow-lg shadow-red-500/30"
+          >
+            <Square size={20} />
+            <span>Stop Execution</span>
+          </button>
+        </div>
+      );
+    }
+    
     if (!showExecuteButton) return null;
 
   return (
@@ -1018,37 +1176,92 @@ function ChatApp() {
       case 'console':
         return (
           <div className="flex-1 flex flex-col bg-gray-950">
-            <div className="bg-gray-800 border-b border-gray-700 px-4 py-2 flex items-center gap-3 shrink-0">
-              <Terminal size={16} className="text-emerald-400" />
-              <span className="text-sm font-medium text-gray-200">Console Output</span>
-              {appExecution.status === 'running' && (
-                <span className="badge-green text-xs ml-auto">Running</span>
-              )}
+            <div className="bg-gray-800 border-b border-gray-700 px-4 py-2 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3">
+                <Terminal size={16} className="text-emerald-400" />
+                <span className="text-sm font-medium text-gray-200">Console Output</span>
+                {appExecution.status === 'running' && (
+                  <span className="badge-green text-xs">Running</span>
+                )}
+                {appExecution.status === 'starting' && (
+                  <span className="badge-cyan text-xs flex items-center gap-1">
+                    <Loader2 size={12} className="animate-spin" />
+                    Starting...
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                {(appExecution.status === 'starting' || appExecution.status === 'running') && (
+                  <button
+                    onClick={stopExecution}
+                    className="px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white rounded-lg text-xs font-medium transition-all flex items-center gap-2"
+                  >
+                    <Square size={12} />
+                    Stop Execution
+                  </button>
+                )}
+                {appExecution.logs.length > 0 && (
+                  <button
+                    onClick={() => setAppExecution(prev => ({ ...prev, logs: [] }))}
+                    className="px-2 py-1 text-gray-400 hover:text-white text-xs transition-colors"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
             </div>
-            <div className="flex-1 overflow-y-auto p-4 font-mono text-sm scrollbar scrollbar-w-3 scrollbar-thumb-amber-500 scrollbar-track-gray-900 hover:scrollbar-thumb-amber-400">
+            <div 
+              className="flex-1 overflow-y-auto p-4 font-mono text-sm"
+              style={{
+                scrollbarWidth: 'thin',
+                scrollbarColor: '#f59e0b #1f2937'
+              }}
+            >
+              <style>{`
+                .console-scroll::-webkit-scrollbar {
+                  width: 10px;
+                }
+                .console-scroll::-webkit-scrollbar-track {
+                  background: #1f2937;
+                  border-radius: 5px;
+                }
+                .console-scroll::-webkit-scrollbar-thumb {
+                  background: #f59e0b;
+                  border-radius: 5px;
+                }
+                .console-scroll::-webkit-scrollbar-thumb:hover {
+                  background: #fbbf24;
+                }
+              `}</style>
               {appExecution.logs.length === 0 ? (
-                <div className="text-gray-500 italic">No logs yet...</div>
+                <div className="text-gray-500 italic">No logs yet. Click "Execute Application" to start...</div>
               ) : (
-                appExecution.logs.map((log, i) => (
-                  <div key={i} className={`py-0.5 ${
-                    log.includes('❌') ? 'text-red-400' :
-                    log.includes('✅') ? 'text-emerald-400' :
-                    log.includes('🚀') ? 'text-blue-400' :
-                    log.includes('📦') ? 'text-yellow-400' :
-                    log.includes('📁') ? 'text-cyan-400' :
-                    log.includes('💾') ? 'text-purple-400' :
-                    log.includes('🔧') ? 'text-violet-400 font-medium' :
-                    log.includes('📋') ? 'text-violet-300 pl-4' :
-                    log.includes('📝') ? 'text-teal-400' :
-                    log.includes('⚠️') ? 'text-orange-400' :
-                    log.includes('└─') ? 'text-gray-500 text-xs pl-4' :
-                    'text-gray-300'
-                  }`}>
-                    {log}
-                  </div>
-                ))
+                <div className="console-scroll" style={{ maxHeight: '100%', overflowY: 'auto' }}>
+                  {appExecution.logs.map((log, i) => (
+                    <div key={i} className={`py-0.5 ${
+                      log.includes('❌') ? 'text-red-400' :
+                      log.includes('✅') ? 'text-emerald-400' :
+                      log.includes('🚀') ? 'text-blue-400' :
+                      log.includes('📦') ? 'text-yellow-400' :
+                      log.includes('📁') ? 'text-cyan-400' :
+                      log.includes('💾') ? 'text-purple-400' :
+                      log.includes('🔧') ? 'text-violet-400 font-medium' :
+                      log.includes('📋') ? 'text-violet-300 pl-4' :
+                      log.includes('📝') ? 'text-teal-400' :
+                      log.includes('⚠️') ? 'text-orange-400' :
+                      log.includes('🛑') ? 'text-red-400 font-medium' :
+                      log.includes('🧪') ? 'text-pink-400' :
+                      log.includes('🔨') ? 'text-amber-400' :
+                      log.includes('🔬') ? 'text-indigo-400' :
+                      log.includes('└─') ? 'text-gray-500 text-xs pl-4' :
+                      'text-gray-300'
+                    }`}>
+                      {log}
+                    </div>
+                  ))}
+                  <div ref={logsEndRef} />
+                </div>
               )}
-              <div ref={logsEndRef} />
             </div>
           </div>
         );

@@ -522,6 +522,11 @@ class EnterpriseCodeOrchestrator:
                 
                 test_files = test_result.get("test_files", [])
                 config_files = test_result.get("config_files", [])
+                updated_files = test_result.get("updated_files", [])
+                
+                # Replace generated_files with updated_files if available (has updated package.json)
+                if updated_files:
+                    generated_files = updated_files
                 
                 for tf in test_files:
                     generated_files.append(tf)
@@ -1018,6 +1023,11 @@ async def process_message_stream(
                 
                 test_files = test_result.get("test_files", [])
                 config_files = test_result.get("config_files", [])
+                updated_files = test_result.get("updated_files", [])
+                
+                # Replace generated_files with updated_files if available (has updated package.json with Jest)
+                if updated_files:
+                    generated_files = updated_files
                 
                 for tf in test_files:
                     generated_files.append(tf)

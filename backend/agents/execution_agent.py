@@ -753,6 +753,70 @@ Respond with a JSON object containing:
                 "message": "✅ Dependencies installed"
             }
             
+            # ==========================================
+            # STEP 1: RUN UNIT TESTS FIRST
+            # ==========================================
+            yield {
+                "type": "log",
+                "message": "🧪 Running unit tests..."
+            }
+            
+            test_success, test_output = await self.run_tests(self.project_dir)
+            
+            if not test_success:
+                self.error_history.append(f"Test failure: {test_output[:1000]}")
+                
+                yield {
+                    "type": "log",
+                    "message": "⚠️ Unit tests failed. Analyzing..."
+                }
+                
+                fix_result = await self.analyze_error(test_output, self.current_files, strategy=strategy)
+                
+                # If standard analysis failed to find fixes, escalate immediately
+                if not ("fixes" in fix_result and fix_result["fixes"]):
+                    yield {
+                        "type": "log",
+                        "message": "⚠️ Standard analysis yielded no fixes for tests. Escalating to Deep Debugging..."
+                    }
+                    fix_result = await self.analyze_error(test_output, self.current_files, strategy="desperate")
+
+                if "fixes" in fix_result and fix_result["fixes"]:
+                    self.current_files, applied = await self.apply_fixes(
+                        fix_result["fixes"], 
+                        self.current_files
+                    )
+                    
+                    yield {
+                        "type": "fix_applied",
+                        "message": f"🔧 Applied fixes for tests: {', '.join(applied)}",
+                        "fixes": applied,
+                        "root_cause": fix_result.get("root_cause", "")
+                    }
+                    
+                    yield {
+                        "type": "files_updated",
+                        "files": self.current_files
+                    }
+                    
+                    await self.save_files_to_disk(self.current_files, self.project_dir)
+                    continue # Retry loop
+                else:
+                    yield {
+                        "type": "log",
+                        "message": "⚠️ Could not auto-fix test failures yet, retrying execution loop...",
+                        "error_history": self.error_history
+                    }
+                    continue
+            else:
+                yield {
+                    "type": "log",
+                    "message": "✅ All unit tests passed!"
+                }
+            
+            # ==========================================
+            # STEP 2: RUN BUILD CHECK AFTER TESTS PASS
+            # ==========================================
             if project_type in ["nextjs", "react-vite"]:
                 yield {
                     "type": "log",
@@ -771,6 +835,14 @@ Respond with a JSON object containing:
                     
                     fix_result = await self.analyze_error(build_output, self.current_files, strategy=strategy)
                     
+                    # If standard analysis failed to find fixes, escalate immediately
+                    if not ("fixes" in fix_result and fix_result["fixes"]):
+                        yield {
+                            "type": "log",
+                            "message": "⚠️ Standard analysis yielded no fixes. Escalating to Deep Debugging..."
+                        }
+                        fix_result = await self.analyze_error(build_output, self.current_files, strategy="desperate")
+
                     if "fixes" in fix_result and fix_result["fixes"]:
                         self.current_files, applied = await self.apply_fixes(
                             fix_result["fixes"], 
@@ -794,63 +866,16 @@ Respond with a JSON object containing:
                         continue
                     else:
                         yield {
-                            "type": "error",
-                            "message": "❌ Could not auto-fix build error. Stopping execution.",
+                            "type": "log",
+                            "message": "⚠️ Could not auto-fix build error yet, retrying execution loop...",
                             "error_history": self.error_history
                         }
-                        return
+                        # Do not return, just retry the loop
+                        continue
             
-            # Run tests BEFORE starting server
-            yield {
-                "type": "log",
-                "message": "🧪 Running unit tests..."
-            }
-            
-            test_success, test_output = await self.run_tests(self.project_dir)
-            
-            if not test_success:
-                self.error_history.append(f"Test failure: {test_output[:1000]}")
-                
-                yield {
-                    "type": "log",
-                    "message": "⚠️ Unit tests failed. Analyzing..."
-                }
-                
-                fix_result = await self.analyze_error(test_output, self.current_files, strategy=strategy)
-                
-                if "fixes" in fix_result and fix_result["fixes"]:
-                    self.current_files, applied = await self.apply_fixes(
-                        fix_result["fixes"], 
-                        self.current_files
-                    )
-                    
-                    yield {
-                        "type": "fix_applied",
-                        "message": f"🔧 Applied fixes for tests: {', '.join(applied)}",
-                        "fixes": applied,
-                        "root_cause": fix_result.get("root_cause", "")
-                    }
-                    
-                    yield {
-                        "type": "files_updated",
-                        "files": self.current_files
-                    }
-                    
-                    await self.save_files_to_disk(self.current_files, self.project_dir)
-                    continue # Retry loop
-                else:
-                    yield {
-                        "type": "error",
-                        "message": "❌ Could not auto-fix test failures. Stopping execution.",
-                        "error_history": self.error_history
-                    }
-                    return
-            else:
-                yield {
-                    "type": "log",
-                    "message": "✅ All unit tests passed!"
-                }
-
+            # ==========================================
+            # STEP 3: START SERVER
+            # ==========================================
             yield {
                 "type": "log",
                 "message": f"🚀 Starting development server on port {port}..."
