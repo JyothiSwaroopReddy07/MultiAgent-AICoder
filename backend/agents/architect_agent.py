@@ -43,7 +43,7 @@ Response format:
   "tech_stack": {
     "frontend": {"framework": "Next.js 14", "language": "TypeScript", "styling": "Tailwind CSS"},
     "backend": {"framework": "Next.js API Routes", "language": "TypeScript"},
-    "database": {"primary": "PostgreSQL", "orm": "Prisma"}
+    "database": {"primary": "SQLite", "library": "better-sqlite3"}
   },
   "batches": [
     {
@@ -71,12 +71,12 @@ CRITICAL BATCHING RULES:
 1. Batch 1 "Skeleton" (8 files): package.json, tsconfig.json, tailwind.config.ts, next.config.js, postcss.config.js, .env.example, app/globals.css, app/layout.tsx
 2. Batch 2 "Pages" (5 files): Core pages (app/page.tsx, feature pages, app/api routes, lib/db.ts)
 3. Batch 3 "Components" (5-6 files): UI components (components/ui/*.tsx, feature components)
-4. Batch 4 "Schemas" (3-4 files): prisma/schema.prisma, types/index.ts, lib/utils.ts, lib/validations.ts
+4. Batch 4 "Schemas" (3-4 files): lib/schema.ts (SQLite schema), types/index.ts, lib/utils.ts, lib/validations.ts
 5. Batch 5 "Validation" (0 files): No files, just validation check
 
 Total: 21-23 files across all batches. Include filename for each file.
 
-Rules: Use Next.js 14 + TypeScript + Tailwind + Prisma for web apps.
+Rules: Use Next.js 14 + TypeScript + Tailwind + better-sqlite3 for web apps.
 """
 
     async def process_task(self, task_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -211,7 +211,7 @@ Respond with a complete JSON architecture document as specified in your system p
                 "tech_stack": {
                     "frontend": {"framework": "Next.js 14", "language": "TypeScript", "styling": "Tailwind CSS"},
                     "backend": {"framework": "Next.js API Routes", "language": "TypeScript"},
-                    "database": {"primary": "PostgreSQL", "orm": "Prisma"}
+                    "database": {"primary": "SQLite", "library": "better-sqlite3"}
                 },
                 "batches": [],
                 "files": [],
@@ -256,13 +256,13 @@ Respond with a complete JSON architecture document as specified in your system p
             })
             priority += 1
         
-        # Prisma schema if using PostgreSQL
-        if database.get("orm") == "Prisma" or database.get("primary") == "PostgreSQL":
+        # SQLite schema file
+        if database.get("primary") == "SQLite":
             files.append({
-                "filepath": "prisma/schema.prisma",
-                "filename": "schema.prisma",
-                "purpose": "Database schema with all models and relationships",
-                "language": "prisma",
+                "filepath": "lib/schema.ts",
+                "filename": "schema.ts",
+                "purpose": "Database schema definitions and table creation with better-sqlite3",
+                "language": "typescript",
                 "priority": priority,
                 "dependencies": [],
                 "category": "database"
@@ -306,7 +306,7 @@ Respond with a complete JSON architecture document as specified in your system p
         # Lib utilities
         lib_files = [
             ("lib/utils.ts", "utils.ts", "Utility functions and helpers"),
-            ("lib/db.ts", "db.ts", "Database connection and Prisma client"),
+            ("lib/db.ts", "db.ts", "Database connection using better-sqlite3"),
             ("lib/auth.ts", "auth.ts", "Authentication utilities"),
             ("lib/validations.ts", "validations.ts", "Input validation schemas"),
         ]
@@ -540,7 +540,7 @@ Respond with a complete JSON architecture document as specified in your system p
             {
                 "filepath": "lib/db.ts",
                 "filename": "db.ts",
-                "purpose": "Database connection and Prisma client",
+                "purpose": "Database connection using better-sqlite3",
                 "language": "typescript",
                 "category": "shared",
                 "priority": 13
@@ -645,13 +645,13 @@ Respond with a complete JSON architecture document as specified in your system p
             }
         ]
 
-        # Add Prisma schema if using database
-        if database.get("orm") == "Prisma" or database.get("primary") == "PostgreSQL":
+        # Add SQLite schema file
+        if database.get("primary") == "SQLite":
             schemas_files.insert(0, {
-                "filepath": "prisma/schema.prisma",
-                "filename": "schema.prisma",
-                "purpose": "Database schema with models and relationships",
-                "language": "prisma",
+                "filepath": "lib/schema.ts",
+                "filename": "schema.ts",
+                "purpose": "Database schema definitions and table creation with better-sqlite3",
+                "language": "typescript",
                 "category": "database",
                 "priority": 23
             })
