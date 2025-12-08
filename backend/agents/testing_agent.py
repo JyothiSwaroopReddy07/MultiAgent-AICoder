@@ -341,8 +341,7 @@ Respond with a JSON fix plan."""
             ".css": "css",
             ".scss": "scss",
             ".md": "markdown",
-            ".py": "python",
-            ".prisma": "prisma"
+            ".py": "python"
         }
         ext = os.path.splitext(filepath)[1].lower()
         return ext_map.get(ext, "text")

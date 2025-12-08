@@ -316,7 +316,6 @@ Generate all {len(batch_files)} files now."""
             '.css': 'css',
             '.scss': 'scss',
             '.py': 'python',
-            '.prisma': 'prisma',
             '.md': 'markdown',
             '.yml': 'yaml',
             '.yaml': 'yaml',

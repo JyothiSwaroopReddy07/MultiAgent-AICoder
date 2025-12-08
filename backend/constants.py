@@ -104,7 +104,6 @@ SUPPORTED_LANGUAGES: Final[list[str]] = [
     "markdown",
     "dockerfile",
     "shell",
-    "prisma",
     "css",
     "scss",
     "html",
