@@ -151,11 +151,12 @@ Return ONLY the files in the specified format. No explanations before or after."
     ) -> str:
         """
         Build minimal context prompt for batch generation.
-
-        Token budget: 1,500-2,000 tokens (vs 4,800 in OLD approach)
+        
+        Optimized for token efficiency: ~1,500-2,000 tokens per batch
+        (compared to 4,800 tokens per file in the single-file approach)
         """
 
-        # Tech stack summary (100 tokens)
+        # Tech stack summary - kept brief (~100 tokens)
         frontend = tech_stack.get("frontend", {})
         backend = tech_stack.get("backend", {})
         database = tech_stack.get("database", {})

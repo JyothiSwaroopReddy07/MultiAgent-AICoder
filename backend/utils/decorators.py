@@ -279,7 +279,8 @@ def log_execution_time(log_level: str = "info"):
 
 class RateLimiter:
     """
-    Rate limiter for API calls
+    Token bucket rate limiter for API calls.
+    Uses sliding window algorithm to track call frequency.
     
     Example:
         rate_limiter = RateLimiter(calls=60, period=60)
@@ -292,11 +293,12 @@ class RateLimiter:
     def __init__(self, calls: int, period: int):
         """
         Args:
-            calls: Maximum number of calls
-            period: Time period in seconds
+            calls: Maximum number of calls allowed in the time window
+            period: Time window duration in seconds
         """
         self.calls = calls
         self.period = period
+        # Stores timestamps of recent calls for sliding window calculation
         self.call_times: list[datetime] = []
     
     def _clean_old_calls(self):

@@ -37,6 +37,7 @@ class TestingAgent(BaseAgent):
             mcp_server=mcp_server,
             openai_client=openai_client
         )
+        # Maximum iterations for the fix-test-fix loop
         self.max_fix_attempts = 3
         self.project_dir = None
 
@@ -117,14 +118,16 @@ IMPORTANT:
         problem_statement: str
     ) -> Dict[str, Any]:
         """
-        Test the generated code and fix any errors
+        Test the generated code and fix any errors using iterative fix loop
         """
         activity = await self.start_activity("Testing generated application")
         
         all_fixes = []
+        # Use dict for O(1) file lookups during fix application
         current_files = {f.get("filepath"): f for f in generated_files}
         
         try:
+            # Iterative fix loop: test -> analyze error -> apply fix -> repeat
             for attempt in range(self.max_fix_attempts):
                 logger.info(f"test_attempt", attempt=attempt + 1)
                 
@@ -367,14 +370,15 @@ Respond with a JSON fix plan."""
 
 
 class DependencyValidator:
-    """Validates that all file dependencies are satisfied"""
+    """Validates that all file dependencies are satisfied by checking import statements"""
     
     @staticmethod
     def find_missing_dependencies(files: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Find imports that reference non-existent files"""
+        """Find imports that reference non-existent files in the generated codebase"""
         file_paths = {f.get("filepath", "") for f in files}
         missing = []
         
+        # Regex patterns for different import syntaxes (ES6, relative paths)
         import_patterns = [
             r"from ['\"](@/[^'\"]+)['\"]",
             r"from ['\"](\./[^'\"]+)['\"]",

@@ -16,9 +16,9 @@ current_agent: ContextVar[Optional[str]] = ContextVar('current_agent', default=N
 
 
 class LLMTracker:
-    """Tracks LLM API calls and token usage"""
+    """Tracks LLM API calls, token usage, and calculates costs per agent"""
 
-    # Pricing per 1K tokens (as of 2024 - update as needed)
+    # Pricing per 1K tokens (as of 2024 - update these rates as API pricing changes)
     PRICING = {
         "gemini-pro": {"prompt": 0.0005, "completion": 0.0015},
         "gemini-1.5-pro": {"prompt": 0.00125, "completion": 0.005},

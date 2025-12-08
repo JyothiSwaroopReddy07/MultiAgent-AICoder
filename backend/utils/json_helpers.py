@@ -92,10 +92,9 @@ def parse_json_response(text: str, logger_context: str = "json_parse_error", fal
 
 def clean_json_string(text: str) -> str:
     """
-    Clean JSON string by removing common issues
-    - Remove BOM characters
-    - Fix escaped newlines
-    - Remove trailing commas
+    Clean JSON string by removing common parsing issues.
+    Handles BOM characters, escaped newlines, and trailing commas
+    that often appear in LLM-generated JSON.
     """
     if not text:
         return text

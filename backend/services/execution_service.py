@@ -18,11 +18,11 @@ import structlog
 
 logger = structlog.get_logger()
 
-# Track running processes
+# Track running processes globally for cleanup and management
 running_processes: Dict[str, subprocess.Popen] = {}
 running_ports: Dict[str, int] = {}
 
-# Base port for generated apps (will increment for each app)
+# Base port for generated apps - starts at 3001 to avoid conflicts with frontend (3000)
 BASE_PORT = 3001
 
 
@@ -260,13 +260,14 @@ async def execute_node_project(
         env["HOSTNAME"] = "0.0.0.0"
         env["BROWSER"] = "none"
         
+        # Start process in its own process group (Unix) for clean termination
         process = subprocess.Popen(
             cmd,
             cwd=project_dir,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             env=env,
-            preexec_fn=os.setsid if os.name != 'nt' else None
+            preexec_fn=os.setsid if os.name != 'nt' else None  # Creates new process group on Unix
         )
         
         running_processes[project_dir] = process
@@ -469,7 +470,7 @@ async def serve_static_files(
 
 
 async def stop_application(project_path: str) -> bool:
-    """Stop a running application"""
+    """Stop a running application by terminating its process group"""
     if project_path in running_processes:
         process = running_processes[project_path]
         

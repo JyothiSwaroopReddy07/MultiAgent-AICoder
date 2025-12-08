@@ -199,7 +199,10 @@ Return updated JSON. Keep it concise. Same structure."""
             }
     
     def _attempt_json_recovery(self, truncated: str) -> Optional[Dict[str, Any]]:
-        """Attempt to recover partial JSON from truncated response"""
+        """
+        Attempt to recover partial JSON from truncated response.
+        Uses regex to extract key fields even if the JSON is incomplete.
+        """
         import re
         
         try:

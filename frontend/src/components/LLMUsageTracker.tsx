@@ -1,4 +1,5 @@
 // Tej - 78879925
+// Real-time dashboard component for monitoring LLM API usage, token counts, and costs
 
 import React, { useState, useEffect } from 'react';
 import {
@@ -7,6 +8,7 @@ import {
   ChevronDown, ChevronRight, X, Minimize2
 } from 'lucide-react';
 
+// API endpoint for fetching usage statistics
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
 interface ModelUsage {

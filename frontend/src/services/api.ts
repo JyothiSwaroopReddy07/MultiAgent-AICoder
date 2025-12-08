@@ -1,11 +1,13 @@
 // Tej - 78879925
 
 /**
- * API service for communicating with backend
+ * API service for communicating with the AI Code Generator backend.
+ * Provides methods for code generation, status tracking, and LLM usage monitoring.
  */
 import axios from 'axios';
 import { CodeRequest, CodeGenerationResult, UsageSummary } from '../types';
 
+// Backend API base URL - configurable via environment variable
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8500/api/v1';
 
 const api = axios.create({

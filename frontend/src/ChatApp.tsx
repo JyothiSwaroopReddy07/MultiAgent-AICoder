@@ -1,4 +1,5 @@
 // Kunwar - 29604570
+// Main chat application component for AI-powered code generation
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import Editor from '@monaco-editor/react';
@@ -11,6 +12,7 @@ import {
 } from 'lucide-react';
 import LLMUsageTracker from './components/LLMUsageTracker';
 
+// Backend API URL - defaults to localhost for development
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
 interface Message {
@@ -43,6 +45,7 @@ interface FileNode {
   children?: FileNode[];
 }
 
+// Tracks the state of the generated application's execution
 interface AppExecutionState {
   status: 'idle' | 'starting' | 'running' | 'stopped' | 'error';
   url: string | null;

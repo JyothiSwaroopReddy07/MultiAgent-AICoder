@@ -7,32 +7,32 @@ Centralized configuration values following best practices
 from enum import Enum
 from typing import Final
 
-# API Configuration
-MAX_RETRIES: Final[int] = 3
-RETRY_DELAY: Final[float] = 1.0
-RETRY_BACKOFF: Final[float] = 2.0
-REQUEST_TIMEOUT: Final[int] = 120
+# API Configuration - controls retry behavior for LLM API calls
+MAX_RETRIES: Final[int] = 3  # Number of retry attempts on failure
+RETRY_DELAY: Final[float] = 1.0  # Initial delay between retries (seconds)
+RETRY_BACKOFF: Final[float] = 2.0  # Exponential backoff multiplier
+REQUEST_TIMEOUT: Final[int] = 120  # Maximum time for a single API call (seconds)
 
 # Rate Limiting
 RATE_LIMIT_CALLS: Final[int] = 60
 RATE_LIMIT_PERIOD: Final[int] = 60  # seconds
 
-# Token Limits
-DEFAULT_MAX_TOKENS: Final[int] = 4000
-MAX_CONTEXT_TOKENS: Final[int] = 128000
-BUFFER_TOKENS: Final[int] = 500
+# Token Limits - controls context window management
+DEFAULT_MAX_TOKENS: Final[int] = 4000  # Default max tokens for LLM response
+MAX_CONTEXT_TOKENS: Final[int] = 128000  # Max context window size (model dependent)
+BUFFER_TOKENS: Final[int] = 500  # Safety buffer to prevent context overflow
 
-# Temperature Settings
+# Temperature Settings - lower values = more deterministic, higher = more creative
 class Temperature:
-    """Temperature values for different agent types"""
-    REQUIREMENTS: Final[float] = 0.5
-    ARCHITECT: Final[float] = 0.4
-    DATABASE: Final[float] = 0.3
-    CODER: Final[float] = 0.3
-    DOCKER: Final[float] = 0.2
-    TESTER: Final[float] = 0.4
-    SECURITY: Final[float] = 0.3
-    REVIEWER: Final[float] = 0.4
+    """Temperature values for different agent types (0.0-1.0 scale)"""
+    REQUIREMENTS: Final[float] = 0.5  # Moderate creativity for requirements analysis
+    ARCHITECT: Final[float] = 0.4  # Balanced for architecture decisions
+    DATABASE: Final[float] = 0.3  # Lower for consistent schema generation
+    CODER: Final[float] = 0.3  # Lower for reliable code generation
+    DOCKER: Final[float] = 0.2  # Very low for deterministic config files
+    TESTER: Final[float] = 0.4  # Moderate for test case creativity
+    SECURITY: Final[float] = 0.3  # Lower for consistent security checks
+    REVIEWER: Final[float] = 0.4  # Moderate for code review insights
 
 # Next.js Configuration
 class NextJSConfig:
@@ -49,9 +49,9 @@ class DatabaseConfig:
     MONGODB_IMAGE: Final[str] = "mongo:7-alpine"
     MONGODB_PORT: Final[int] = 27017
 
-# File Generation Limits
-MAX_FILES_PER_GENERATION: Final[int] = 50
-MIN_FILES_PER_GENERATION: Final[int] = 10
+# File Generation Limits - bounds for a single generation session
+MAX_FILES_PER_GENERATION: Final[int] = 50  # Prevents runaway generation
+MIN_FILES_PER_GENERATION: Final[int] = 10  # Ensures minimum viable project
 
 # Validation
 MAX_DESCRIPTION_LENGTH: Final[int] = 5000

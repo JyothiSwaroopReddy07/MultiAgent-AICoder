@@ -292,10 +292,13 @@ Return ONLY the raw code content. No explanations or markdown blocks."""
         file_spec: Dict[str, Any],
         generated_files: List[Dict[str, Any]]
     ) -> List[Dict[str, Any]]:
-        """Get files that are relevant to the current file being generated"""
+        """
+        Get files relevant to the current file for context injection.
+        Includes dependencies, config files, type definitions, and sibling files.
+        """
         relevant = []
         
-        # Get dependencies
+        # Start with explicitly declared dependencies
         dependencies = file_spec.get("dependencies", [])
         
         for gen_file in generated_files:
@@ -325,10 +328,13 @@ Return ONLY the raw code content. No explanations or markdown blocks."""
         return relevant
 
     def _clean_code_response(self, response: str, language: str) -> str:
-        """Clean up the LLM response to extract just the code"""
+        """
+        Clean up the LLM response to extract raw code.
+        Removes markdown formatting, code blocks, and explanatory text.
+        """
         content = response.strip()
         
-        # Remove markdown code blocks
+        # Remove markdown code blocks (```language ... ```)
         if content.startswith("```"):
             lines = content.split("\n")
             # Remove first line (```language)

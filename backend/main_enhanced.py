@@ -50,7 +50,8 @@ logger = structlog.get_logger()
 # Settings
 settings = get_settings()
 
-# In-memory conversation store
+# In-memory conversation store - maps conversation_id to ConversationState
+# Note: This is cleared on server restart; use database for persistence in production
 conversations: Dict[str, ConversationState] = {}
 
 
@@ -93,11 +94,12 @@ app.add_middleware(
 
 # ============================================================================
 # ENTERPRISE CODE GENERATION ORCHESTRATOR
+# Main orchestrator that coordinates all agents for code generation
 # ============================================================================
 
 class EnterpriseCodeOrchestrator:
     """
-    Enterprise-grade code generation orchestrator - NEW BATCH ARCHITECTURE.
+    Enterprise-grade code generation orchestrator using batch architecture.
 
     Uses multiple specialized agents:
     1. FeaturePlannerAgent - Proposes features and gets user confirmation

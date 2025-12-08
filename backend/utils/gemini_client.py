@@ -17,7 +17,8 @@ from constants import REQUEST_TIMEOUT, MAX_RETRIES
 
 logger = structlog.get_logger()
 
-# Global safety settings to disable all content filtering
+# Disable all safety filters to allow code generation without content restrictions
+# Required for generating code that may contain security-related patterns
 SAFETY_SETTINGS = {
     HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
     HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
@@ -45,9 +46,10 @@ class GeminiClient:
         if not self.api_key:
             raise ValueError("Gemini API key not found. Set GEMINI_API_KEY environment variable.")
 
-        # Configure Gemini
+        # Initialize the Gemini API with the provided key
         genai.configure(api_key=self.api_key)
-        # Map old model names to new ones for backward compatibility
+        
+        # Map legacy model names to current versions for backward compatibility
         model_mapping = {
             "gemini-pro": "gemini-2.5-flash",
             "gemini-1.5-pro": "gemini-2.5-pro",
