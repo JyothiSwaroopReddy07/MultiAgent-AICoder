@@ -1,4 +1,5 @@
 #!/bin/bash
+# Tej - 78879925
 
 # AI Code Generator Startup Script
 

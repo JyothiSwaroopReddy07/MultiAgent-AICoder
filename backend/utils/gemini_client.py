@@ -1,4 +1,4 @@
-# edited by Kunwarjeet
+# Tej - 78879925
 
 """
 Gemini client wrapper with usage tracking, retry logic, and error handling

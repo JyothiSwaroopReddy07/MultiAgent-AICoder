@@ -1,3 +1,5 @@
+// Jyothi Swaroop - 59607464
+
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   content: [
