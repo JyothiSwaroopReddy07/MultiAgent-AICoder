@@ -1,3 +1,5 @@
+# edited by Kunwarjeet
+
 """
 Base Agent - Abstract base class for all agents
 """
@@ -9,6 +11,7 @@ import structlog
 
 from models.schemas import AgentRole, AgentActivity, LLMUsage
 from utils.gemini_client import get_gemini_client
+from utils.llm_tracker import tracker
 
 logger = structlog.get_logger()
 
@@ -96,6 +99,9 @@ class BaseAgent(ABC):
         
         sys_prompt = system_prompt or self.get_system_prompt()
         last_error = None
+        
+        # Set agent context for usage tracking
+        tracker.set_current_agent(self.role.value)
         
         for attempt in range(max_retries):
             try:

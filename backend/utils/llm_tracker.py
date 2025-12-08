@@ -1,12 +1,18 @@
+# edited by Kunwarjeet
+
 """
 LLM Usage Tracker - Monitors API calls and token usage
 """
 from typing import Dict, Optional
 from datetime import datetime
+from contextvars import ContextVar
 import structlog
 from models.schemas import LLMUsage
 
 logger = structlog.get_logger()
+
+# Context variable to track which agent is making the current LLM call
+current_agent: ContextVar[Optional[str]] = ContextVar('current_agent', default=None)
 
 
 class LLMTracker:
@@ -24,17 +30,19 @@ class LLMTracker:
     }
 
     def __init__(self):
-        self.usage_history: list[LLMUsage] = []
+        self.usage_history: list[Dict] = []  # Store dict with agent info
         self.total_calls = 0
         self.total_tokens = 0
         self.total_cost = 0.0
+        self.usage_by_agent: Dict[str, Dict] = {}  # Track usage by agent
 
     def track_usage(
         self,
         model: str,
         prompt_tokens: int,
         completion_tokens: int,
-        response_metadata: Optional[Dict] = None
+        response_metadata: Optional[Dict] = None,
+        agent: Optional[str] = None
     ) -> LLMUsage:
         """
         Track a single LLM API call
@@ -44,12 +52,17 @@ class LLMTracker:
             prompt_tokens: Number of prompt tokens
             completion_tokens: Number of completion tokens
             response_metadata: Additional metadata from the API response
+            agent: Name of the agent making the call (optional)
 
         Returns:
             LLMUsage object with usage details
         """
         total_tokens = prompt_tokens + completion_tokens
         cost = self._calculate_cost(model, prompt_tokens, completion_tokens)
+
+        # Get agent from context if not provided
+        if agent is None:
+            agent = current_agent.get() or "unknown"
 
         usage = LLMUsage(
             model=model,
@@ -59,7 +72,39 @@ class LLMTracker:
             cost=cost
         )
 
-        self.usage_history.append(usage)
+        # Store with agent info
+        usage_entry = {
+            "usage": usage,
+            "agent": agent,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        self.usage_history.append(usage_entry)
+
+        # Update agent-specific tracking
+        if agent not in self.usage_by_agent:
+            self.usage_by_agent[agent] = {
+                "calls": 0,
+                "tokens": 0,
+                "cost": 0.0,
+                "models": {}
+            }
+        
+        self.usage_by_agent[agent]["calls"] += 1
+        self.usage_by_agent[agent]["tokens"] += total_tokens
+        self.usage_by_agent[agent]["cost"] += cost
+        
+        # Track by model within agent
+        if model not in self.usage_by_agent[agent]["models"]:
+            self.usage_by_agent[agent]["models"][model] = {
+                "calls": 0,
+                "tokens": 0,
+                "cost": 0.0
+            }
+        self.usage_by_agent[agent]["models"][model]["calls"] += 1
+        self.usage_by_agent[agent]["models"][model]["tokens"] += total_tokens
+        self.usage_by_agent[agent]["models"][model]["cost"] += cost
+
+        # Update totals
         self.total_calls += 1
         self.total_tokens += total_tokens
         self.total_cost += cost
@@ -69,6 +114,7 @@ class LLMTracker:
             model=model,
             tokens=total_tokens,
             cost=cost,
+            agent=agent,
             total_calls=self.total_calls
         )
 
@@ -105,13 +151,15 @@ class LLMTracker:
             "total_tokens": self.total_tokens,
             "total_cost": round(self.total_cost, 4),
             "average_tokens_per_call": round(self.total_tokens / max(self.total_calls, 1), 2),
-            "usage_by_model": self._usage_by_model()
+            "usage_by_model": self._usage_by_model(),
+            "usage_by_agent": self._get_usage_by_agent()
         }
 
     def _usage_by_model(self) -> Dict[str, Dict]:
         """Group usage statistics by model"""
         by_model = {}
-        for usage in self.usage_history:
+        for entry in self.usage_history:
+            usage = entry["usage"]
             if usage.model not in by_model:
                 by_model[usage.model] = {
                     "calls": 0,
@@ -128,13 +176,41 @@ class LLMTracker:
 
         return by_model
 
+    def _get_usage_by_agent(self) -> Dict[str, Dict]:
+        """Get usage statistics grouped by agent"""
+        result = {}
+        for agent, stats in self.usage_by_agent.items():
+            result[agent] = {
+                "calls": stats["calls"],
+                "tokens": stats["tokens"],
+                "cost": round(stats["cost"], 4),
+                "models": {
+                    model: {
+                        "calls": model_stats["calls"],
+                        "tokens": model_stats["tokens"],
+                        "cost": round(model_stats["cost"], 4)
+                    }
+                    for model, model_stats in stats["models"].items()
+                }
+            }
+        return result
+
     def reset(self):
         """Reset all tracking data"""
         self.usage_history.clear()
+        self.usage_by_agent.clear()
         self.total_calls = 0
         self.total_tokens = 0
         self.total_cost = 0.0
         logger.info("llm_tracker_reset")
+
+    def set_current_agent(self, agent: str):
+        """Set the current agent context for tracking"""
+        current_agent.set(agent)
+
+    def clear_current_agent(self):
+        """Clear the current agent context"""
+        current_agent.set(None)
 
 
 # Global tracker instance

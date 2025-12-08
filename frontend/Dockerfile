@@ -1,3 +1,5 @@
+# edited by Kunwarjeet
+
 # Use Node.js 18 alpine image
 FROM node:18-alpine
 
@@ -15,6 +17,9 @@ COPY . .
 
 # Expose port
 EXPOSE 3000
+
+# Set environment variable to ensure React dev server listens on all interfaces
+ENV HOST=0.0.0.0
 
 # Command to run the application
 CMD ["npm", "start"]
