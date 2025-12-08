@@ -34,23 +34,49 @@ class ArchitectAgent(BaseAgent):
     def get_system_prompt(self) -> str:
         return """You are a Software Architect. Return JSON only, no markdown.
 
+NEW ARCHITECTURE: You must organize files into 5 FIXED BATCHES for efficient generation.
+
 Response format:
 {
-  "analysis": {"problem_summary": "...", "complexity": "simple|moderate|complex", "estimated_files": 20},
+  "analysis": {"problem_summary": "...", "complexity": "simple|moderate|complex", "estimated_files": 23},
   "architecture": {"project_type": "fullstack_monolith", "pattern": "MVC"},
   "tech_stack": {
     "frontend": {"framework": "Next.js 14", "language": "TypeScript", "styling": "Tailwind CSS"},
     "backend": {"framework": "Next.js API Routes", "language": "TypeScript"},
-    "database": {"primary": "PostgreSQL", "orm": "Prisma"}
+    "database": {"primary": "SQLite", "library": "better-sqlite3"}
   },
-  "files": [
-    {"filepath": "package.json", "filename": "package.json", "purpose": "Dependencies", "language": "json", "category": "config"},
-    {"filepath": "src/app/page.tsx", "filename": "page.tsx", "purpose": "Home page", "language": "typescript", "category": "frontend"}
+  "batches": [
+    {
+      "name": "Skeleton",
+      "description": "Configuration and setup files",
+      "priority": 1,
+      "files": [
+        {"filepath": "package.json", "filename": "package.json", "purpose": "Dependencies", "language": "json", "category": "config"},
+        {"filepath": "tsconfig.json", "filename": "tsconfig.json", "purpose": "TypeScript config", "language": "json", "category": "config"}
+      ]
+    },
+    {
+      "name": "Pages",
+      "description": "Core pages and API routes",
+      "priority": 2,
+      "files": [
+        {"filepath": "app/page.tsx", "filename": "page.tsx", "purpose": "Home page", "language": "typescript", "category": "frontend"}
+      ]
+    }
   ],
   "features": [{"id": "f1", "name": "Feature", "description": "...", "priority": "high"}]
 }
 
-Rules: Use Next.js 14 + TypeScript + Tailwind + Prisma for web apps. List 15-30 files. Include filename for each file.
+CRITICAL BATCHING RULES:
+1. Batch 1 "Skeleton" (8 files): package.json, tsconfig.json, tailwind.config.ts, next.config.js, postcss.config.js, .env.example, app/globals.css, app/layout.tsx
+2. Batch 2 "Pages" (5 files): Core pages (app/page.tsx, feature pages, app/api routes, lib/db.ts)
+3. Batch 3 "Components" (5-6 files): UI components (components/ui/*.tsx, feature components)
+4. Batch 4 "Schemas" (3-4 files): lib/schema.ts (SQLite schema), types/index.ts, lib/utils.ts, lib/validations.ts
+5. Batch 5 "Validation" (0 files): No files, just validation check
+
+Total: 21-23 files across all batches. Include filename for each file.
+
+Rules: Use Next.js 14 + TypeScript + Tailwind + better-sqlite3 for web apps.
 """
 
     async def process_task(self, task_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -149,43 +175,50 @@ Respond with a complete JSON architecture document as specified in your system p
             if response.endswith("```"):
                 response = response[:-3]
             response = response.strip()
-            
+
             architecture = json.loads(response)
-            
+
             # Validate required fields
             required_fields = ["analysis", "architecture", "tech_stack"]
             for field in required_fields:
                 if field not in architecture:
                     architecture[field] = {}
-            
-            # Ensure files is a list
-            if not isinstance(architecture.get("files"), list) or len(architecture.get("files", [])) == 0:
-                # Generate default files based on architecture
-                architecture["files"] = self._generate_default_files(architecture)
-            
+
+            # NEW: Ensure batches is a list
+            if not isinstance(architecture.get("batches"), list) or len(architecture.get("batches", [])) == 0:
+                # Generate default batches based on architecture
+                architecture["batches"] = self._generate_default_batches(architecture)
+
+            # OLD: Keep files for backward compatibility (flatten batches)
+            if not isinstance(architecture.get("files"), list):
+                architecture["files"] = self._flatten_batches_to_files(architecture.get("batches", []))
+
             return architecture
-            
+
         except json.JSONDecodeError as e:
             logger.error("architecture_parse_error", error=str(e), response_preview=response[:500])
-            # Return minimal valid architecture with default files
+            # Return minimal valid architecture with default batches
             default_arch = {
                 "analysis": {
                     "problem_summary": "Architecture parsing failed - using defaults",
-                    "complexity": "moderate"
+                    "complexity": "moderate",
+                    "estimated_files": 23
                 },
                 "architecture": {
                     "project_type": "fullstack_monolith",
                     "pattern": "MVC"
                 },
                 "tech_stack": {
-                    "frontend": {"framework": "Next.js 14", "language": "TypeScript"},
+                    "frontend": {"framework": "Next.js 14", "language": "TypeScript", "styling": "Tailwind CSS"},
                     "backend": {"framework": "Next.js API Routes", "language": "TypeScript"},
-                    "database": {"primary": "PostgreSQL", "orm": "Prisma"}
+                    "database": {"primary": "SQLite", "library": "better-sqlite3"}
                 },
+                "batches": [],
                 "files": [],
                 "parse_error": str(e)
             }
-            default_arch["files"] = self._generate_default_files(default_arch)
+            default_arch["batches"] = self._generate_default_batches(default_arch)
+            default_arch["files"] = self._flatten_batches_to_files(default_arch["batches"])
             return default_arch
     
     def _generate_default_files(self, architecture: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -223,13 +256,13 @@ Respond with a complete JSON architecture document as specified in your system p
             })
             priority += 1
         
-        # Prisma schema if using PostgreSQL
-        if database.get("orm") == "Prisma" or database.get("primary") == "PostgreSQL":
+        # SQLite schema file
+        if database.get("primary") == "SQLite":
             files.append({
-                "filepath": "prisma/schema.prisma",
-                "filename": "schema.prisma",
-                "purpose": "Database schema with all models and relationships",
-                "language": "prisma",
+                "filepath": "lib/schema.ts",
+                "filename": "schema.ts",
+                "purpose": "Database schema definitions and table creation with better-sqlite3",
+                "language": "typescript",
                 "priority": priority,
                 "dependencies": [],
                 "category": "database"
@@ -273,7 +306,7 @@ Respond with a complete JSON architecture document as specified in your system p
         # Lib utilities
         lib_files = [
             ("lib/utils.ts", "utils.ts", "Utility functions and helpers"),
-            ("lib/db.ts", "db.ts", "Database connection and Prisma client"),
+            ("lib/db.ts", "db.ts", "Database connection using better-sqlite3"),
             ("lib/auth.ts", "auth.ts", "Authentication utilities"),
             ("lib/validations.ts", "validations.ts", "Input validation schemas"),
         ]
@@ -372,6 +405,284 @@ Respond with a complete JSON architecture document as specified in your system p
             "category": "docs"
         })
         
+        return files
+
+    def _generate_default_batches(self, architecture: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """
+        Generate 5 fixed batches for efficient code generation.
+
+        NEW ARCHITECTURE:
+        - Batch 1: Skeleton (8 config files)
+        - Batch 2: Pages (5 core pages/routes)
+        - Batch 3: Components (5-6 UI components)
+        - Batch 4: Schemas (3-4 types/schema files)
+        - Batch 5: Validation (0 files, just check)
+        """
+        tech_stack = architecture.get("tech_stack", {})
+        frontend = tech_stack.get("frontend", {})
+        database = tech_stack.get("database", {})
+
+        batches = []
+
+        # ========================================
+        # BATCH 1: SKELETON (8 files)
+        # ========================================
+        skeleton_files = [
+            {
+                "filepath": "package.json",
+                "filename": "package.json",
+                "purpose": "Project dependencies and npm scripts",
+                "language": "json",
+                "category": "config",
+                "priority": 1
+            },
+            {
+                "filepath": "tsconfig.json",
+                "filename": "tsconfig.json",
+                "purpose": "TypeScript configuration",
+                "language": "json",
+                "category": "config",
+                "priority": 2
+            },
+            {
+                "filepath": "tailwind.config.ts",
+                "filename": "tailwind.config.ts",
+                "purpose": "Tailwind CSS configuration",
+                "language": "typescript",
+                "category": "config",
+                "priority": 3
+            },
+            {
+                "filepath": "next.config.js",
+                "filename": "next.config.js",
+                "purpose": "Next.js configuration",
+                "language": "javascript",
+                "category": "config",
+                "priority": 4
+            },
+            {
+                "filepath": "postcss.config.js",
+                "filename": "postcss.config.js",
+                "purpose": "PostCSS configuration for Tailwind",
+                "language": "javascript",
+                "category": "config",
+                "priority": 5
+            },
+            {
+                "filepath": ".env.example",
+                "filename": ".env.example",
+                "purpose": "Environment variables template",
+                "language": "shell",
+                "category": "config",
+                "priority": 6
+            },
+            {
+                "filepath": "app/globals.css",
+                "filename": "globals.css",
+                "purpose": "Global styles with Tailwind directives",
+                "language": "css",
+                "category": "frontend",
+                "priority": 7
+            },
+            {
+                "filepath": "app/layout.tsx",
+                "filename": "layout.tsx",
+                "purpose": "Root layout with providers and metadata",
+                "language": "typescript",
+                "category": "frontend",
+                "priority": 8
+            }
+        ]
+
+        batches.append({
+            "name": "Skeleton",
+            "description": "Configuration and setup files",
+            "priority": 1,
+            "files": skeleton_files
+        })
+
+        # ========================================
+        # BATCH 2: PAGES (5 files)
+        # ========================================
+        pages_files = [
+            {
+                "filepath": "app/page.tsx",
+                "filename": "page.tsx",
+                "purpose": "Home page component",
+                "language": "typescript",
+                "category": "frontend",
+                "priority": 9
+            },
+            {
+                "filepath": "app/dashboard/page.tsx",
+                "filename": "page.tsx",
+                "purpose": "Dashboard page",
+                "language": "typescript",
+                "category": "frontend",
+                "priority": 10
+            },
+            {
+                "filepath": "app/api/health/route.ts",
+                "filename": "route.ts",
+                "purpose": "Health check API endpoint",
+                "language": "typescript",
+                "category": "backend",
+                "priority": 11
+            },
+            {
+                "filepath": "app/api/data/route.ts",
+                "filename": "route.ts",
+                "purpose": "Main data API endpoint",
+                "language": "typescript",
+                "category": "backend",
+                "priority": 12
+            },
+            {
+                "filepath": "lib/db.ts",
+                "filename": "db.ts",
+                "purpose": "Database connection using better-sqlite3",
+                "language": "typescript",
+                "category": "shared",
+                "priority": 13
+            }
+        ]
+
+        batches.append({
+            "name": "Pages",
+            "description": "Core pages and API routes",
+            "priority": 2,
+            "files": pages_files
+        })
+
+        # ========================================
+        # BATCH 3: COMPONENTS (6 files)
+        # ========================================
+        components_files = [
+            {
+                "filepath": "components/ui/Button.tsx",
+                "filename": "Button.tsx",
+                "purpose": "Reusable button component",
+                "language": "typescript",
+                "category": "frontend",
+                "priority": 14
+            },
+            {
+                "filepath": "components/ui/Input.tsx",
+                "filename": "Input.tsx",
+                "purpose": "Form input component",
+                "language": "typescript",
+                "category": "frontend",
+                "priority": 15
+            },
+            {
+                "filepath": "components/ui/Card.tsx",
+                "filename": "Card.tsx",
+                "purpose": "Card container component",
+                "language": "typescript",
+                "category": "frontend",
+                "priority": 16
+            },
+            {
+                "filepath": "components/layout/Header.tsx",
+                "filename": "Header.tsx",
+                "purpose": "Header with navigation",
+                "language": "typescript",
+                "category": "frontend",
+                "priority": 17
+            },
+            {
+                "filepath": "components/DataForm.tsx",
+                "filename": "DataForm.tsx",
+                "purpose": "Main data entry form",
+                "language": "typescript",
+                "category": "frontend",
+                "priority": 18
+            },
+            {
+                "filepath": "components/DataList.tsx",
+                "filename": "DataList.tsx",
+                "purpose": "List view for data items",
+                "language": "typescript",
+                "category": "frontend",
+                "priority": 19
+            }
+        ]
+
+        batches.append({
+            "name": "Components",
+            "description": "UI components",
+            "priority": 3,
+            "files": components_files
+        })
+
+        # ========================================
+        # BATCH 4: SCHEMAS (4 files)
+        # ========================================
+        schemas_files = [
+            {
+                "filepath": "types/index.ts",
+                "filename": "index.ts",
+                "purpose": "TypeScript type definitions",
+                "language": "typescript",
+                "category": "shared",
+                "priority": 20
+            },
+            {
+                "filepath": "lib/utils.ts",
+                "filename": "utils.ts",
+                "purpose": "Utility functions and helpers",
+                "language": "typescript",
+                "category": "shared",
+                "priority": 21
+            },
+            {
+                "filepath": "lib/validations.ts",
+                "filename": "validations.ts",
+                "purpose": "Input validation schemas",
+                "language": "typescript",
+                "category": "shared",
+                "priority": 22
+            }
+        ]
+
+        # Add SQLite schema file
+        if database.get("primary") == "SQLite":
+            schemas_files.insert(0, {
+                "filepath": "lib/schema.ts",
+                "filename": "schema.ts",
+                "purpose": "Database schema definitions and table creation with better-sqlite3",
+                "language": "typescript",
+                "category": "database",
+                "priority": 23
+            })
+
+        batches.append({
+            "name": "Schemas",
+            "description": "Database schema and TypeScript types",
+            "priority": 4,
+            "files": schemas_files
+        })
+
+        # ========================================
+        # BATCH 5: VALIDATION (0 files)
+        # ========================================
+        batches.append({
+            "name": "Validation",
+            "description": "Integration validation only",
+            "priority": 5,
+            "files": []
+        })
+
+        return batches
+
+    def _flatten_batches_to_files(self, batches: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Flatten batches into a single list of files for backward compatibility.
+        """
+        files = []
+        for batch in batches:
+            batch_files = batch.get("files", [])
+            files.extend(batch_files)
         return files
 
 

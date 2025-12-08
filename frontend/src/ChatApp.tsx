@@ -1,3 +1,5 @@
+// edited by Kunwarjeet
+
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import Editor from '@monaco-editor/react';
 import { 
@@ -5,8 +7,9 @@ import {
   FolderTree, FileCode, ChevronRight, ChevronDown,
   Sparkles, Bot, User, Rocket, ExternalLink,
   RefreshCw, Square, Globe, Terminal, Eye, MonitorPlay,
-  Zap, AlertCircle, Maximize2
+  Zap, AlertCircle, Maximize2, Activity
 } from 'lucide-react';
+import LLMUsageTracker from './components/LLMUsageTracker';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
@@ -75,6 +78,7 @@ function ChatApp() {
   const [showExecuteButton, setShowExecuteButton] = useState(false);
   const [previewWindow, setPreviewWindow] = useState<Window | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [showLLMUsageTracker, setShowLLMUsageTracker] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const codeScrollRef = useRef<HTMLDivElement>(null);
@@ -817,6 +821,18 @@ function ChatApp() {
               </div>
             </div>
             <div className="flex items-center gap-3">
+              <button
+                onClick={() => setShowLLMUsageTracker(!showLLMUsageTracker)}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all ${
+                  showLLMUsageTracker
+                    ? 'bg-violet-600 text-white'
+                    : 'bg-gray-700/50 text-gray-300 hover:bg-gray-700'
+                }`}
+                title="Toggle LLM Usage Tracking"
+              >
+                <Activity size={16} />
+                <span className="text-xs font-medium">Usage</span>
+              </button>
               {appExecution.status === 'running' && (
                 <span className="badge-green flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
@@ -906,20 +922,26 @@ function ChatApp() {
                 Features ({proposedFeatures.length})
               </h4>
               <div className="space-y-1.5">
-                {proposedFeatures.map(feat => (
-                  <div key={feat.id} className="text-xs p-2 bg-gray-700/30 rounded">
-                    <div className="flex items-start gap-2">
-                      <span className={`mt-0.5 ${
-                        feat.priority === 'high' ? 'text-red-400' :
-                        feat.priority === 'medium' ? 'text-yellow-400' :
-                        'text-gray-400'
-                      }`}>•</span>
-                      <div className="flex-1">
-                        <div className="font-medium text-gray-200">{feat.title}</div>
+                {proposedFeatures.map(feat => {
+                  // Check if any generated files relate to this feature (simple heuristic)
+                  const isImplemented = codeFiles.some(file =>
+                    file.filepath.toLowerCase().includes(feat.title.toLowerCase().split(' ')[0]) ||
+                    file.content.toLowerCase().includes(feat.title.toLowerCase())
+                  );
+
+                  return (
+                    <div key={feat.id} className="text-xs p-2 bg-gray-700/30 rounded">
+                      <div className="flex items-start gap-2">
+                        <span className={`mt-0.5 transition-colors ${
+                          isImplemented ? 'text-emerald-400' : 'text-red-400'
+                        }`}>•</span>
+                        <div className="flex-1">
+                          <div className="font-medium text-gray-200">{feat.title}</div>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
@@ -1039,6 +1061,15 @@ function ChatApp() {
 
         {renderExecuteButton()}
       </div>
+
+      {/* LLM Usage Tracker */}
+      {showLLMUsageTracker && (
+        <LLMUsageTracker
+          onClose={() => setShowLLMUsageTracker(false)}
+          autoRefresh={true}
+          refreshInterval={3000}
+        />
+      )}
     </div>
   );
 }
