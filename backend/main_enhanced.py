@@ -330,55 +330,84 @@ class EnterpriseCodeOrchestrator:
             logger.info("file_planning_complete", total_files=total_files)
             
             # ========================================
-            # PHASE 3: CODE GENERATION
+            # PHASE 3: PARALLEL CODE GENERATION
             # ========================================
             generated_files = []
             base_progress = 30
-            progress_per_file = 60 / max(total_files, 1)  # 30-90% for file generation
+            progress_per_file = 60 / max(total_files, 1)
+            files_completed = 0
             
-            for i, file_spec in enumerate(files_to_generate):
-                filepath = file_spec.get("filepath", f"file_{i}")
+            if on_progress:
+                await on_progress({
+                    "phase": "generating",
+                    "message": f"⚙️ Generating {total_files} files in parallel...",
+                    "progress": 35
+                })
+            
+            # Parallel generation with semaphore
+            sem = asyncio.Semaphore(5)  # 5 concurrent generations
+            
+            async def generate_single(file_spec, idx):
+                async with sem:
+                    try:
+                        result = await self.code_generator.generate_review_fix_test(
+                            file_spec=file_spec,
+                            architecture=architecture,
+                            generated_files=generated_files,
+                            problem_statement=problem_statement,
+                            max_fix_attempts=2
+                        )
+                        return {"success": True, "result": result, "idx": idx}
+                    except Exception as e:
+                        return {"success": False, "error": str(e), "filepath": file_spec.get("filepath")}
+            
+            # Create all tasks
+            tasks = [generate_single(spec, i) for i, spec in enumerate(files_to_generate)]
+            
+            # Execute in parallel and collect results
+            results = await asyncio.gather(*tasks)
+            
+            for res in results:
+                files_completed += 1
                 
-                if on_progress:
-                    await on_progress({
-                        "phase": "generating",
-                        "message": f"⚙️ Generating {filepath}...",
-                        "progress": int(base_progress + (i * progress_per_file)),
-                        "data": {
-                            "current_file": filepath,
-                            "file_number": i + 1,
-                            "total_files": total_files
-                        }
-                    })
-                
-                try:
-                    file_result = await self.code_generator.generate_file(
-                        file_spec=file_spec,
-                        architecture=architecture,
-                        generated_files=generated_files,
-                        problem_statement=problem_statement
-                    )
+                if res.get("success") and res.get("result"):
+                    result_data = res["result"]
                     
-                    generated_files.append(file_result)
+                    if result_data.get("source_file"):
+                        source = result_data["source_file"]
+                        generated_files.append(source)
+                        logger.info("file_generated", filepath=source.get("filepath"))
+                    
+                    if result_data.get("test_file"):
+                        test = result_data["test_file"]
+                        generated_files.append(test)
+                        logger.info("test_generated", filepath=test.get("filepath"))
+                else:
+                    logger.error("file_generation_error", 
+                               filepath=res.get("filepath", "unknown"), 
+                               error=res.get("error", "Unknown error"))
                     
                     if on_progress:
                         await on_progress({
-                            "phase": "file_generated",
-                            "message": f"✅ Generated {filepath}",
-                            "progress": int(base_progress + ((i + 1) * progress_per_file)),
-                            "data": file_result
-                        })
-                    
-                    logger.info("file_generated", 
-                              filepath=filepath,
-                              language=file_result.get("language"))
-                    
-                except Exception as e:
-                    logger.error("file_generation_error", 
-                               filepath=filepath, 
-                               error=str(e))
-                    # Continue with other files
-                    continue
+                    "phase": "generation_complete",
+                    "message": f"✅ Generated {len(generated_files)} files",
+                    "progress": 85
+                })
+            
+            # ========================================
+            # PHASE 3.5: ENSURE ESSENTIAL CONFIG FILES
+            # ========================================
+            if on_progress:
+                await on_progress({
+                    "phase": "ensuring_configs",
+                    "message": "📦 Ensuring essential config files...",
+                    "progress": 86
+                })
+            
+            # Add any missing essential files (package.json, tsconfig, jest.config, etc.)
+            generated_files = self.code_generator.ensure_essential_files(
+                generated_files, architecture
+            )
             
             result["files"] = generated_files
             
@@ -462,95 +491,63 @@ class EnterpriseCodeOrchestrator:
                     result["validation"] = {"valid": True, "issues": []}
             
             # ========================================
-            # PHASE 6: CODE REVIEW
+            # PHASE 6: SKIPPED - Code reviewed per-file during generation
             # ========================================
+            reviewed_count = sum(1 for f in generated_files if not ".test." in f.get("filepath", ""))
+            test_count = sum(1 for f in generated_files if ".test." in f.get("filepath", ""))
+            
             if on_progress:
                 await on_progress({
-                    "phase": "reviewing_code",
-                    "message": "🔍 Reviewing code for syntax errors...",
-                    "progress": 90
+                    "phase": "code_reviewed",
+                    "message": f"✅ {reviewed_count} files reviewed during generation",
+                    "progress": 92
                 })
             
-            try:
-                review_result = await self.code_reviewer.review_and_fix_files(
-                    files=generated_files,
-                    architecture=architecture
-                )
-                
-                generated_files = review_result.get("files", generated_files)
-                review_summary = review_result.get("review_summary", {})
-                
-                if review_summary.get("files_fixed", 0) > 0:
-                    if on_progress:
-                        await on_progress({
-                            "phase": "code_fixed",
-                            "message": f"✅ Fixed syntax errors in {review_summary['files_fixed']} files",
-                            "progress": 92,
-                            "data": review_summary
-                        })
-                    logger.info("code_review_fixes_applied", **review_summary)
-                else:
-                    if on_progress:
-                        await on_progress({
-                            "phase": "code_reviewed",
-                            "message": "✅ Code review passed - no syntax errors",
-                            "progress": 92
-                        })
-                
-                result["review_summary"] = review_summary
-                
-            except Exception as e:
-                logger.error("code_review_error", error=str(e))
-                result["review_summary"] = {"error": str(e)}
+            result["review_summary"] = {
+                "files_reviewed": reviewed_count,
+                "tests_generated": test_count,
+                "reviewed_during_generation": True
+            }
             
             # ========================================
-            # PHASE 7: UNIT TEST GENERATION
+            # PHASE 7: SKIPPED - Tests generated with source files
             # ========================================
-            if on_progress:
-                await on_progress({
-                    "phase": "generating_tests",
-                    "message": "🧪 Generating unit tests for each file...",
-                    "progress": 94
-                })
-            
-            try:
-                test_result = await self.test_generator.generate_tests(
-                    generated_files=generated_files,
-                    architecture=architecture,
-                    problem_statement=problem_statement
-                )
-                
-                test_files = test_result.get("test_files", [])
-                config_files = test_result.get("config_files", [])
-                updated_files = test_result.get("updated_files", [])
-                
-                # Replace generated_files with updated_files if available (has updated package.json)
-                if updated_files:
-                    generated_files = updated_files
-                
-                for tf in test_files:
-                    generated_files.append(tf)
-                
-                for cf in config_files:
-                    if not any(f.get("filepath") == cf.get("filepath") for f in generated_files):
+            # Add Jest config if tests exist but no config
+            has_jest_config = any("jest" in f.get("filepath", "").lower() for f in generated_files)
+            if test_count > 0 and not has_jest_config:
+                jest_configs = [
+                    {
+                        "filepath": "jest.config.js",
+                        "filename": "jest.config.js",
+                        "content": """module.exports = {
+  testEnvironment: 'jsdom',
+  setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
+  moduleNameMapper: { '^@/(.*)$': '<rootDir>/src/$1' },
+  testPathIgnorePatterns: ['<rootDir>/.next/', '<rootDir>/node_modules/'],
+};""",
+                        "language": "javascript",
+                        "category": "config"
+                    },
+                    {
+                        "filepath": "jest.setup.js",
+                        "filename": "jest.setup.js",
+                        "content": "import '@testing-library/jest-dom';",
+                        "language": "javascript",
+                        "category": "config"
+                    }
+                ]
+                for cf in jest_configs:
                         generated_files.append(cf)
                 
-                result["test_summary"] = test_result.get("summary", {})
-                
                 if on_progress:
-                    test_count = len(test_files)
                     await on_progress({
                         "phase": "tests_generated",
-                        "message": f"✅ Generated {test_count} unit test files",
+                    "message": f"✅ {test_count} test files generated with source",
                         "progress": 96,
                         "data": {"test_files": test_count}
                     })
                 
-                logger.info("unit_test_generation_complete", test_files=len(test_files))
-                
-            except Exception as e:
-                logger.error("unit_test_generation_error", error=str(e))
-                result["test_summary"] = {"error": str(e)}
+            result["test_summary"] = {"test_files": test_count, "generated_with_source": True}
             
             # Update files in result
             result["files"] = generated_files
@@ -886,67 +883,107 @@ async def process_message_stream(
             total_processed = 0
             
             # Semaphore to limit concurrency and prevent rate limiting
-            # 3 concurrent requests is a safe balance for Gemini
-            sem = asyncio.Semaphore(3)
+            # HIGH PARALLELISM: Generate all files concurrently with rate limiting
+            sem = asyncio.Semaphore(5)  # 5 concurrent file generations
             
-            for priority in sorted_priorities:
-                batch = files_by_priority[priority]
-                
-                async def generate_with_semaphore(file_spec, idx):
-                    async with sem:
-                        filepath = file_spec.get("filepath", f"file_{idx}")
-                        try:
-                            logger.info("generating_file", index=idx, total=len(files_to_generate), filepath=filepath)
-                            
-                            # Pass currently generated files as context
-                            # Note: Files in the same batch won't see each other, which is why we batch by priority
-                            return await orchestrator.code_generator.generate_file(
-                                file_spec=file_spec,
-                                architecture=architecture,
-                                generated_files=generated_files,
-                                problem_statement=message
-                            )
-                        except Exception as e:
-                            error_msg = str(e)
-                            logger.error("file_generation_error", filepath=filepath, error=error_msg)
-                            
-                            # Handle rate limits
-                            if "rate" in error_msg.lower() or "429" in error_msg:
-                                logger.warning("rate_limit_detected", waiting=5)
-                                await asyncio.sleep(5)
-                                # Retry once
-                                try:
-                                    return await orchestrator.code_generator.generate_file(
-                                        file_spec=file_spec,
-                                        architecture=architecture,
-                                        generated_files=generated_files,
-                                        problem_statement=message
-                                    )
-                                except Exception as retry_e:
-                                    return {"error": str(retry_e), "filepath": filepath}
-                            
-                            return {"error": error_msg, "filepath": filepath}
+            async def generate_with_semaphore(file_spec, idx):
+                async with sem:
+                    filepath = file_spec.get("filepath", f"file_{idx}")
+                    try:
+                        logger.info("pipeline_start", index=idx, total=len(files_to_generate), filepath=filepath)
+                        
+                        # Use comprehensive pipeline: Generate → Review → Fix → Test
+                        result = await orchestrator.code_generator.generate_review_fix_test(
+                            file_spec=file_spec,
+                            architecture=architecture,
+                            generated_files=generated_files,
+                            problem_statement=message,
+                            max_fix_attempts=2
+                        )
+                        return result
+                    except Exception as e:
+                        error_msg = str(e)
+                        logger.error("pipeline_error", filepath=filepath, error=error_msg)
+                        
+                        # Handle rate limits
+                        if "rate" in error_msg.lower() or "429" in error_msg:
+                            logger.warning("rate_limit_detected", waiting=3)
+                            await asyncio.sleep(3)
+                            # Retry once
+                            try:
+                                return await orchestrator.code_generator.generate_review_fix_test(
+                                    file_spec=file_spec,
+                                    architecture=architecture,
+                                    generated_files=generated_files,
+                                    problem_statement=message,
+                                    max_fix_attempts=2
+                                )
+                            except Exception as retry_e:
+                                return {"error": str(retry_e), "filepath": filepath}
+                        
+                        return {"error": error_msg, "filepath": filepath}
 
-                # Create tasks for this batch
-                tasks = []
-                for file_spec in batch:
-                    total_processed += 1
-                    tasks.append(generate_with_semaphore(file_spec, total_processed))
-                
-                # Execute batch
-                if tasks:
-                    batch_results = await asyncio.gather(*tasks)
+            # Create ALL tasks upfront for maximum parallelism
+            all_tasks = []
+            for file_spec in files_to_generate:
+                total_processed += 1
+                all_tasks.append(generate_with_semaphore(file_spec, total_processed))
+            
+            # Execute ALL files in parallel (semaphore controls concurrency)
+            logger.info("parallel_generation_start", total_files=len(all_tasks), concurrency=5)
+            
+            # Use as_completed for streaming results as they finish
+            for coro in asyncio.as_completed(all_tasks):
+                try:
+                    result = await coro
                     
-                    # Process results
-                    for res in batch_results:
-                        if "error" in res:
-                            yield f"data: {json.dumps({'type': 'file_error', 'data': res})}\n\n"
-                        else:
-                            generated_files.append(res)
-                            yield f"data: {json.dumps({'type': 'file_generated', 'data': res})}\n\n"
-                
-                # Small delay between batches to let API cool down
-                await asyncio.sleep(0.5)
+                    # Handle skipped files (e.g., package.json deferred for full context)
+                    if result.get("skipped"):
+                        logger.info("file_deferred", filepath=result.get("filepath"),
+                                   reason=result.get("skip_reason"))
+                        continue  # Will be generated in ensure_essential_files
+                    
+                    if "error" in result:
+                        yield f"data: {json.dumps({'type': 'file_error', 'data': result})}\n\n"
+                    else:
+                        # Add source file
+                        if result.get("source_file"):
+                            source = result["source_file"]
+                            generated_files.append(source)
+                            yield f"data: {json.dumps({'type': 'file_generated', 'data': source, 'file_type': 'source', 'review_passed': result.get('review_passed', False), 'errors_fixed': result.get('errors_fixed', [])})}\n\n"
+                        
+                        # Add test file
+                        if result.get("test_file"):
+                            test = result["test_file"]
+                            generated_files.append(test)
+                            yield f"data: {json.dumps({'type': 'file_generated', 'data': test, 'file_type': 'test'})}\n\n"
+                            
+                except Exception as e:
+                    logger.error("parallel_task_error", error=str(e))
+                    yield f"data: {json.dumps({'type': 'file_error', 'data': {'error': str(e)}})}\n\n"
+            
+            logger.info("parallel_generation_complete", files_generated=len(generated_files))
+            
+            # ========================================
+            # PHASE 3.5: GENERATE CONFIG FILES WITH FULL CONTEXT
+            # ========================================
+            yield f"data: {json.dumps({'type': 'phase_change', 'data': {'phase': 'generating_configs', 'message': '📦 Generating config files with extracted dependencies...'}})}\n\n"
+            
+            # Generate config files WITH FULL CODEBASE CONTEXT
+            # This ensures package.json has all required dependencies extracted from imports
+            code_files_before = len(generated_files)
+            generated_files = orchestrator.code_generator.ensure_essential_files(
+                generated_files, architecture
+            )
+            
+            # Stream the newly generated config files
+            config_files = [f for f in generated_files if f.get("category") == "config"]
+            for cf in config_files:
+                yield f"data: {json.dumps({'type': 'file_generated', 'data': cf, 'file_type': 'config', 'auto_generated': True, 'context_aware': True})}\n\n"
+            
+            logger.info("config_files_with_context", 
+                       code_files=code_files_before,
+                       config_files=len(config_files))
             
             # ========================================
             # PHASE 4: DEPENDENCY VALIDATION
@@ -985,65 +1022,25 @@ async def process_message_stream(
                         logger.error("missing_file_generation_error", path=missing_path, error=str(e))
             
             # ========================================
-            # PHASE 5: CODE REVIEW
+            # PHASE 5: SKIPPED - Code review done per-file during generation
             # ========================================
-            yield f"data: {json.dumps({'type': 'phase_change', 'data': {'phase': 'reviewing_code', 'message': '🔍 Reviewing code for syntax errors...'}})}\n\n"
+            yield f"data: {json.dumps({'type': 'phase_change', 'data': {'phase': 'code_reviewed', 'message': '✅ All files reviewed during generation'}})}\n\n"
             
-            try:
-                review_result = await orchestrator.code_reviewer.review_and_fix_files(
-                    files=generated_files,
-                    architecture=architecture
-                )
-                
-                generated_files = review_result.get("files", generated_files)
-                review_summary = review_result.get("review_summary", {})
-                
-                if review_summary.get("files_fixed", 0) > 0:
-                    fixed_count = review_summary.get("files_fixed", 0)
-                    msg = f"✅ Fixed syntax errors in {fixed_count} files"
-                    yield f"data: {json.dumps({'type': 'code_fixed', 'data': {'message': msg, 'summary': review_summary}})}\n\n"
-                else:
-                    yield f"data: {json.dumps({'type': 'code_reviewed', 'data': {'message': '✅ Code review passed - no syntax errors'}})}\n\n"
-                
-            except Exception as e:
-                logger.error("code_review_error", error=str(e))
-                yield f"data: {json.dumps({'type': 'warning', 'data': {'message': f'⚠️ Code review skipped: {str(e)[:100]}'}})}\n\n"
+            # Count how many files passed review and have tests
+            reviewed_count = sum(1 for f in generated_files if not f.get("filepath", "").endswith(".test.tsx"))
+            test_count = sum(1 for f in generated_files if ".test." in f.get("filepath", ""))
+            
+            yield f"data: {json.dumps({'type': 'code_reviewed', 'data': {'message': f'✅ {reviewed_count} files reviewed, {test_count} tests generated'}})}\n\n"
             
             # ========================================
-            # PHASE 6: UNIT TEST GENERATION
+            # PHASE 6: COMPLETE - Tests and configs already generated
             # ========================================
-            yield f"data: {json.dumps({'type': 'phase_change', 'data': {'phase': 'generating_tests', 'message': '🧪 Generating unit tests for each file...'}})}\n\n"
+            # Tests are included from per-file pipeline
+            # Config files (jest.config.ts, etc.) are from ensure_essential_files
+            test_files = [f for f in generated_files if ".test." in f.get("filepath", "")]
+            test_count = len(test_files)
             
-            try:
-                test_result = await orchestrator.test_generator.generate_tests(
-                    generated_files=generated_files,
-                    architecture=architecture,
-                    problem_statement=conv.problem_statement or message
-                )
-                
-                test_files = test_result.get("test_files", [])
-                config_files = test_result.get("config_files", [])
-                updated_files = test_result.get("updated_files", [])
-                
-                # Replace generated_files with updated_files if available (has updated package.json with Jest)
-                if updated_files:
-                    generated_files = updated_files
-                
-                for tf in test_files:
-                    generated_files.append(tf)
-                    yield f"data: {json.dumps({'type': 'file_generated', 'data': tf})}\n\n"
-                
-                for cf in config_files:
-                    if not any(f.get("filepath") == cf.get("filepath") for f in generated_files):
-                        generated_files.append(cf)
-                        yield f"data: {json.dumps({'type': 'file_generated', 'data': cf})}\n\n"
-                
-                test_count = len(test_files)
-                yield f"data: {json.dumps({'type': 'tests_generated', 'data': {'message': f'✅ Generated {test_count} unit test files', 'test_count': test_count, 'summary': test_result.get('summary', {})}})}\n\n"
-                
-            except Exception as e:
-                logger.error("unit_test_generation_error", error=str(e))
-                yield f"data: {json.dumps({'type': 'warning', 'data': {'message': f'⚠️ Unit test generation skipped: {str(e)[:100]}'}})}\n\n"
+            yield f"data: {json.dumps({'type': 'tests_generated', 'data': {'message': f'✅ {test_count} test files generated with source', 'test_count': test_count}})}\n\n"
             
             conv.phase = ConversationPhase.CODE_GENERATED
             

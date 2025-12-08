@@ -29,8 +29,15 @@ class FeaturePlannerAgent(BaseAgent):
             openai_client=openai_client
         )
 
+    # Maximum number of core features to implement
+    MAX_CORE_FEATURES = 4
+
     def get_system_prompt(self) -> str:
-        return """You are a Product Manager expert. Analyze requirements and propose a COMPREHENSIVE feature list.
+        return """You are a Product Manager expert. Analyze requirements and propose ONLY the 4 MOST ESSENTIAL features.
+
+## CRITICAL RULE: EXACTLY 4 CORE FEATURES
+You MUST select only the 4 most important, essential features that form the MVP (Minimum Viable Product).
+Focus on the core functionality. DO NOT include nice-to-have features in core_features.
 
 ## Response Format (STRICTLY follow this JSON format)
 
@@ -56,20 +63,21 @@ class FeaturePlannerAgent(BaseAgent):
         }
     ],
     "tech_recommendations": {
-        "frontend": "React/Next.js",
-        "backend": "Node.js or Python",
-        "database": "PostgreSQL or MongoDB"
+        "frontend": "Next.js with TypeScript",
+        "backend": "Next.js API Routes",
+        "database": "None (localStorage for MVP)"
     },
-    "estimated_files": 25,
+    "estimated_files": 15,
     "estimated_complexity": "medium"
 }
 ```
 
 ## RULES
-- Cover ALL requirements from the user
-- Break down complex requirements into specific features
-- Include user stories for core features
-- Be practical and focused
+1. EXACTLY 4 core features - no more, no less
+2. Focus on MVP - what's the minimum to make the app useful?
+3. Put all other nice-to-have features in optional_features
+4. Keep it simple and focused
+5. Prefer client-side solutions (localStorage) over complex backends for MVP
 """
 
     async def process_task(self, task_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -96,26 +104,41 @@ class FeaturePlannerAgent(BaseAgent):
         problem_statement: str
     ) -> Dict[str, Any]:
         """
-        Analyze problem statement and propose features
+        Analyze problem statement and propose exactly 4 essential features
         """
-        activity = await self.start_activity("Analyzing requirements and proposing features")
+        activity = await self.start_activity("Analyzing requirements and selecting 4 essential features")
         
         try:
-            prompt = f"""Analyze this requirement and propose a COMPREHENSIVE feature list:
+            prompt = f"""Analyze this requirement and propose EXACTLY 4 ESSENTIAL core features for the MVP:
 
 {problem_statement}
 
-Reply with JSON. Cover all requirements."""
+IMPORTANT:
+- Select ONLY the 4 most important features that make the app functional
+- Put everything else in optional_features
+- Keep it simple - focus on MVP
+- Prefer simple solutions (localStorage over database, client-side over server-side)
+
+Reply with JSON. EXACTLY 4 core_features."""
 
             response = await self.call_llm(
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.3,
-                max_tokens=8192
+                max_tokens=4096
             )
             
             feature_plan = self._parse_feature_plan(response)
             
+            # Enforce the 4 feature limit
+            feature_plan = self._enforce_feature_limit(feature_plan)
+            
             await self.complete_activity("completed")
+            
+            logger.info(
+                "feature_planning_complete",
+                core_features=len(feature_plan.get("core_features", [])),
+                optional_features=len(feature_plan.get("optional_features", []))
+            )
             
             return {
                 "feature_plan": feature_plan,
@@ -127,6 +150,34 @@ Reply with JSON. Cover all requirements."""
             await self.complete_activity("failed")
             logger.error("feature_planning_failed", error=str(e))
             raise
+    
+    def _enforce_feature_limit(self, feature_plan: Dict[str, Any]) -> Dict[str, Any]:
+        """Ensure only MAX_CORE_FEATURES are in core_features, move extras to optional"""
+        core_features = feature_plan.get("core_features", [])
+        optional_features = feature_plan.get("optional_features", [])
+        
+        if len(core_features) > self.MAX_CORE_FEATURES:
+            # Sort by priority/complexity if available, keep first 4
+            # Move the rest to optional
+            kept_features = core_features[:self.MAX_CORE_FEATURES]
+            moved_features = core_features[self.MAX_CORE_FEATURES:]
+            
+            # Update moved features to be optional
+            for f in moved_features:
+                f["priority"] = "nice-to-have"
+            
+            optional_features = moved_features + optional_features
+            
+            logger.info(
+                "features_limited",
+                kept=len(kept_features),
+                moved_to_optional=len(moved_features)
+            )
+            
+            feature_plan["core_features"] = kept_features
+            feature_plan["optional_features"] = optional_features
+        
+        return feature_plan
 
     async def refine_features(
         self,
@@ -134,7 +185,7 @@ Reply with JSON. Cover all requirements."""
         user_feedback: str
     ) -> Dict[str, Any]:
         """
-        Refine feature plan based on user feedback
+        Refine feature plan based on user feedback (still limited to 4 core features)
         """
         activity = await self.start_activity("Refining features based on feedback")
         
@@ -146,15 +197,20 @@ Current Plan:
 
 User Feedback: {user_feedback}
 
+IMPORTANT: Keep EXACTLY 4 core features. Move any extras to optional_features.
+
 Return updated JSON. Keep it concise. Same structure."""
 
             response = await self.call_llm(
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.3,
-                max_tokens=8192
+                max_tokens=4096
             )
             
             refined_plan = self._parse_feature_plan(response)
+            
+            # Enforce the 4 feature limit
+            refined_plan = self._enforce_feature_limit(refined_plan)
             
             await self.complete_activity("completed")
             

@@ -31,6 +31,7 @@ from agents.feature_planner_agent import FeaturePlannerAgent
 from agents.testing_agent import TestingAgent, DependencyValidator
 from agents.test_generator_agent import TestGeneratorAgent, TestReportAgent
 from agents.code_reviewer_agent import CodeReviewerAgent
+from agents.validation_pipeline_agent import ValidationPipelineAgent
 
 __all__ = [
     "BaseAgent",
@@ -43,5 +44,6 @@ __all__ = [
     "TestGeneratorAgent",
     "TestReportAgent",
     "TestingAgent",
-    "DependencyValidator"
+    "DependencyValidator",
+    "ValidationPipelineAgent"
 ]

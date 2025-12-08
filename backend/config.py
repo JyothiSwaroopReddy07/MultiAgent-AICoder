@@ -22,8 +22,8 @@ class Settings(BaseSettings):
 
     # Gemini Configuration - explicitly loaded from .env
     gemini_api_key: str = os.getenv("GEMINI_API_KEY", "")
-    gemini_model: str = "gemini-2.5-flash"
-    gemini_fallback_model: str = "gemini-2.0-flash"
+    gemini_model: str = "gemini-2.5-pro"  # Using Pro for better code quality
+    gemini_fallback_model: str = "gemini-2.5-flash"  # Flash as fallback
 
     # Server Configuration
     backend_port: int = 8000
