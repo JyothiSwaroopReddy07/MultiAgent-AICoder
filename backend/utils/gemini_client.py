@@ -1,3 +1,5 @@
+# edited by Kunwarjeet
+
 """
 Gemini client wrapper with usage tracking, retry logic, and error handling
 """
@@ -265,8 +267,43 @@ class GeminiClient:
                 raise ValueError(f"Gemini API returned empty/unusable content. Response type: {type(response).__name__}")
 
             # Extract usage information (Gemini provides token counts)
-            prompt_tokens = response.usage_metadata.prompt_token_count if hasattr(response, 'usage_metadata') else 0
-            completion_tokens = response.usage_metadata.candidates_token_count if hasattr(response, 'usage_metadata') else 0
+            prompt_tokens = 0
+            completion_tokens = 0
+            
+            if hasattr(response, 'usage_metadata'):
+                usage_meta = response.usage_metadata
+                
+                # Log all available fields for debugging
+                logger.debug(
+                    "usage_metadata_available",
+                    fields=dir(usage_meta),
+                    str_repr=str(usage_meta)
+                )
+                
+                # Try different possible field names
+                prompt_tokens = (
+                    getattr(usage_meta, 'prompt_token_count', None) or
+                    getattr(usage_meta, 'input_token_count', None) or
+                    getattr(usage_meta, 'prompt_tokens', None) or
+                    0
+                )
+                
+                completion_tokens = (
+                    getattr(usage_meta, 'candidates_token_count', None) or
+                    getattr(usage_meta, 'output_token_count', None) or
+                    getattr(usage_meta, 'completion_tokens', None) or
+                    0
+                )
+                
+                logger.info(
+                    "token_usage_extracted",
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    total=prompt_tokens + completion_tokens,
+                    model=model_name
+                )
+            else:
+                logger.warning("no_usage_metadata_in_response", model=model_name)
 
             # Track usage
             usage = tracker.track_usage(
@@ -390,8 +427,36 @@ class GeminiClient:
                 )
 
             # Extract usage information
-            prompt_tokens = response.usage_metadata.prompt_token_count if hasattr(response, 'usage_metadata') else 0
-            completion_tokens = response.usage_metadata.candidates_token_count if hasattr(response, 'usage_metadata') else 0
+            prompt_tokens = 0
+            completion_tokens = 0
+            
+            if hasattr(response, 'usage_metadata'):
+                usage_meta = response.usage_metadata
+                
+                # Try different possible field names
+                prompt_tokens = (
+                    getattr(usage_meta, 'prompt_token_count', None) or
+                    getattr(usage_meta, 'input_token_count', None) or
+                    getattr(usage_meta, 'prompt_tokens', None) or
+                    0
+                )
+                
+                completion_tokens = (
+                    getattr(usage_meta, 'candidates_token_count', None) or
+                    getattr(usage_meta, 'output_token_count', None) or
+                    getattr(usage_meta, 'completion_tokens', None) or
+                    0
+                )
+                
+                logger.info(
+                    "token_usage_extracted_tools",
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    total=prompt_tokens + completion_tokens,
+                    model=self.model
+                )
+            else:
+                logger.warning("no_usage_metadata_in_response_tools", model=self.model)
 
             # Track usage
             usage = tracker.track_usage(
