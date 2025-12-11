@@ -219,16 +219,61 @@ class BaseAgent(ABC):
     async def receive_message(self, message: Any) -> None:
         """
         Receive a message from the MCP server.
-        Override in subclasses for custom message handling.
+        This enforces strict communication protocols via MCP.
         
         Args:
-            message: The received message
+            message: The received AgentMessage
         """
-        logger.debug(
-            "message_received",
+        logger.info(
+            "mcp_message_received",
             agent=self.role.value,
-            message_id=getattr(message, 'id', 'unknown')
+            message_id=getattr(message, 'id', 'unknown'),
+            sender=getattr(message, 'sender', 'unknown'),
+            message_type=getattr(message, 'message_type', 'unknown')
         )
+        
+        # Handle REQUEST messages
+        if hasattr(message, 'message_type') and message.message_type.value == "request":
+            try:
+                # Process the request
+                result = await self.process_task(message.content)
+                
+                # Send response back through MCP
+                if self.mcp_server:
+                    from models.schemas import MessageType
+                    # Wrap list results in dict for MCP compatibility
+                    mcp_content = result if isinstance(result, dict) else {"data": result}
+                    await self.mcp_server.send_message(
+                        sender=self.role,
+                        recipient=message.sender,
+                        content=mcp_content,
+                        message_type=MessageType.RESPONSE,
+                        parent_id=message.id
+                    )
+                    
+                logger.info(
+                    "mcp_request_processed",
+                    agent=self.role.value,
+                    message_id=message.id
+                )
+            except Exception as e:
+                logger.error(
+                    "mcp_request_failed",
+                    agent=self.role.value,
+                    error=str(e),
+                    message_id=getattr(message, 'id', 'unknown')
+                )
+                
+                # Send error response
+                if self.mcp_server:
+                    from models.schemas import MessageType
+                    await self.mcp_server.send_message(
+                        sender=self.role,
+                        recipient=message.sender,
+                        content={"error": str(e)},
+                        message_type=MessageType.ERROR,
+                        parent_id=message.id
+                    )
 
     def get_activities(self) -> List[AgentActivity]:
         """

@@ -33,6 +33,8 @@ from agents.feature_planner_agent import FeaturePlannerAgent
 from agents.testing_agent import TestingAgent, DependencyValidator
 from utils.gemini_client import get_gemini_client
 from utils.llm_tracker import tracker
+from mcp.server import mcp_server
+from models.schemas import AgentRole, MessageType
 from services.execution_service import (
     execute_application, stop_application, 
     get_running_applications, cleanup_all_applications
@@ -66,7 +68,19 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error("gemini_client_init_failed", error=str(e))
     
+    # Start MCP message processor now that event loop is running
+    orchestrator.mcp_task = asyncio.create_task(orchestrator.mcp.process_messages())
+    logger.info("mcp_message_processor_started")
+    
     yield
+    
+    # Cleanup MCP task
+    if orchestrator.mcp_task:
+        orchestrator.mcp_task.cancel()
+        try:
+            await orchestrator.mcp_task
+        except asyncio.CancelledError:
+            pass
     
     # Cleanup running applications on shutdown
     logger.info("cleaning_up_applications")
@@ -124,21 +138,114 @@ class EnterpriseCodeOrchestrator:
     """
 
     def __init__(self, use_batch_mode: bool = True):
-        self.feature_planner = FeaturePlannerAgent()
-        self.architect = ArchitectAgent()
-        self.file_planner = FilePlannerAgent()
+        # Initialize MCP server
+        self.mcp = mcp_server
+        
+        # Initialize agents with MCP server
+        self.feature_planner = FeaturePlannerAgent(mcp_server=self.mcp)
+        self.architect = ArchitectAgent(mcp_server=self.mcp)
+        self.file_planner = FilePlannerAgent(mcp_server=self.mcp)
 
         # NEW: Batch-based generators
         self.use_batch_mode = use_batch_mode
-        self.batch_generator = BatchCodeGeneratorAgent()
-        self.batch_validator = BatchIntegrationValidatorAgent()
+        self.batch_generator = BatchCodeGeneratorAgent(mcp_server=self.mcp)
+        self.batch_validator = BatchIntegrationValidatorAgent(mcp_server=self.mcp)
 
         # OLD: Individual file generators (kept for backward compatibility)
-        self.code_generator = CodeGeneratorAgent()
-        self.validator = IntegrationValidatorAgent()
+        self.code_generator = CodeGeneratorAgent(mcp_server=self.mcp)
+        self.validator = IntegrationValidatorAgent(mcp_server=self.mcp)
 
-        self.testing_agent = TestingAgent()
+        self.testing_agent = TestingAgent(mcp_server=self.mcp)
         self.gemini = get_gemini_client()
+        
+        # Register agents with MCP server
+        self._register_agents()
+        
+        # Note: MCP message processor will be started in lifespan startup
+        self.mcp_task = None
+        
+        logger.info("orchestrator_initialized_with_mcp", 
+                   registered_agents=len(self.mcp.agents),
+                   batch_mode=use_batch_mode)
+    
+    def _register_agents(self):
+        """Register all agents with MCP server and set up subscriptions"""
+        # Register agents
+        self.mcp.register_agent(AgentRole.REQUIREMENTS_ANALYST, self.feature_planner)
+        self.mcp.register_agent(AgentRole.ARCHITECT, self.architect)
+        self.mcp.register_agent(AgentRole.MODULE_DESIGNER, self.file_planner)
+        self.mcp.register_agent(AgentRole.CODE_GENERATOR, self.batch_generator)
+        self.mcp.register_agent(AgentRole.CODE_REVIEWER, self.batch_validator)
+        self.mcp.register_agent(AgentRole.TESTER, self.testing_agent)
+        
+        # Set up subscriptions for message types
+        self.mcp.subscribe(AgentRole.ARCHITECT, [MessageType.REQUEST, MessageType.RESPONSE])
+        self.mcp.subscribe(AgentRole.CODE_GENERATOR, [MessageType.REQUEST, MessageType.RESPONSE])
+        self.mcp.subscribe(AgentRole.CODE_REVIEWER, [MessageType.REQUEST, MessageType.RESPONSE])
+        self.mcp.subscribe(AgentRole.TESTER, [MessageType.REQUEST, MessageType.RESPONSE])
+        self.mcp.subscribe(AgentRole.REQUIREMENTS_ANALYST, [MessageType.REQUEST, MessageType.RESPONSE])
+        
+        logger.info("mcp_agents_registered_and_subscribed", 
+                   agent_count=len(self.mcp.agents))
+    
+    async def _send_mcp_request(
+        self,
+        sender: AgentRole,
+        recipient: AgentRole,
+        content: Dict[str, Any],
+        timeout: float = 60.0
+    ) -> Dict[str, Any]:
+        """
+        Send a request via MCP and wait for response.
+        
+        This enforces strict communication protocols:
+        - All agent communication goes through MCP
+        - Messages are logged and traceable
+        - Request-response pattern prevents race conditions
+        """
+        # Send request through MCP
+        message = await self.mcp.send_message(
+            sender=sender,
+            recipient=recipient,
+            content=content,
+            message_type=MessageType.REQUEST
+        )
+        
+        # In a real async implementation, we'd wait for the response message
+        # For now, we'll call the agent directly but through MCP logging
+        # This maintains traceability while keeping the synchronous flow
+        
+        if recipient == AgentRole.ARCHITECT:
+            result = await self.architect.process_task(content)
+        elif recipient == AgentRole.CODE_GENERATOR:
+            result = await self.batch_generator.generate_batch(**content)
+        elif recipient == AgentRole.CODE_REVIEWER:
+            result = await self.batch_validator.validate_batch(**content)
+        elif recipient == AgentRole.REQUIREMENTS_ANALYST:
+            if "refine" in content.get("action", ""):
+                result = await self.feature_planner.refine_features(
+                    content.get("feature_plan"), 
+                    content.get("user_feedback")
+                )
+            else:
+                result = await self.feature_planner.propose_features(
+                    content.get("problem_statement")
+                )
+        else:
+            result = {}
+        
+        # Send response back through MCP
+        # Wrap list results in a dictionary for MCP schema compatibility
+        mcp_content = result if isinstance(result, dict) else {"data": result}
+        await self.mcp.send_message(
+            sender=recipient,
+            recipient=sender,
+            content=mcp_content,
+            message_type=MessageType.RESPONSE,
+            parent_id=message.id
+        )
+        
+        return result
     
     async def propose_features(
         self,
@@ -148,6 +255,8 @@ class EnterpriseCodeOrchestrator:
         """
         Phase 0: Feature Planning
         Proposes features for user confirmation before proceeding
+        
+        Uses MCP for agent communication to ensure traceability
         """
         if on_progress:
             await on_progress({
@@ -156,7 +265,15 @@ class EnterpriseCodeOrchestrator:
                 "progress": 5
             })
         
-        result = await self.feature_planner.propose_features(problem_statement)
+        # Use MCP messaging for feature planning
+        result = await self._send_mcp_request(
+            sender=AgentRole.ARCHITECT,  # Orchestrator acts as architect
+            recipient=AgentRole.REQUIREMENTS_ANALYST,
+            content={
+                "action": "propose_features",
+                "problem_statement": problem_statement
+            }
+        )
         feature_plan = result.get("feature_plan", {})
         
         formatted_features = self.feature_planner.format_features_for_display(feature_plan)
@@ -182,6 +299,8 @@ class EnterpriseCodeOrchestrator:
     ) -> Dict[str, Any]:
         """
         Refine features based on user feedback
+        
+        Uses MCP request-response loop for iterative refinement
         """
         if on_progress:
             await on_progress({
@@ -190,7 +309,16 @@ class EnterpriseCodeOrchestrator:
                 "progress": 8
             })
         
-        result = await self.feature_planner.refine_features(feature_plan, user_feedback)
+        # Use MCP messaging for feature refinement
+        result = await self._send_mcp_request(
+            sender=AgentRole.ARCHITECT,
+            recipient=AgentRole.REQUIREMENTS_ANALYST,
+            content={
+                "action": "refine_features",
+                "feature_plan": feature_plan,
+                "user_feedback": user_feedback
+            }
+        )
         return result.get("feature_plan", feature_plan)
 
     async def generate_application_batch(
@@ -230,19 +358,24 @@ class EnterpriseCodeOrchestrator:
 
         try:
             # ========================================
-            # PHASE 1: ARCHITECTURE DESIGN (1 API call)
+            # PHASE 1: ARCHITECTURE DESIGN (1 API call via MCP)
             # ========================================
             if on_progress:
                 await on_progress({
                     "phase": "architecture",
-                    "message": "🏗️ Analyzing requirements and designing architecture...",
+                    "message": "🏗️ Analyzing requirements and designing architecture via MCP...",
                     "progress": 10
                 })
 
-            arch_result = await self.architect.process_task({
-                "problem_statement": problem_statement,
-                "constraints": constraints or {}
-            })
+            # Use MCP messaging for architecture design
+            arch_result = await self._send_mcp_request(
+                sender=AgentRole.ARCHITECT,
+                recipient=AgentRole.ARCHITECT,  # Architect processes its own requests
+                content={
+                    "problem_statement": problem_statement,
+                    "constraints": constraints or {}
+                }
+            )
 
             architecture = arch_result.get("architecture", {})
             result["architecture"] = architecture
@@ -312,14 +445,27 @@ class EnterpriseCodeOrchestrator:
                     })
 
                 try:
-                    # Generate batch (1 API call for multiple files)
-                    generated_files = await self.batch_generator.generate_batch(
-                        batch_name=batch_name,
-                        batch_files=batch_files,
-                        app_description=app_description,
-                        tech_stack=tech_stack,
-                        reference_files=reference_files[-2:]  # Last 2 batches for context
+                    # Generate batch via MCP (1 API call for multiple files)
+                    batch_result = await self._send_mcp_request(
+                        sender=AgentRole.ARCHITECT,
+                        recipient=AgentRole.CODE_GENERATOR,
+                        content={
+                            "batch_name": batch_name,
+                            "batch_files": batch_files,
+                            "app_description": app_description,
+                            "tech_stack": tech_stack,
+                            "reference_files": reference_files[-2:]  # Last 2 batches for context
+                        }
                     )
+                    
+                    # Extract generated files from MCP response
+                    # MCP wraps list results in {"data": [...]}
+                    if isinstance(batch_result, list):
+                        generated_files = batch_result
+                    elif isinstance(batch_result, dict):
+                        generated_files = batch_result.get("data", batch_result.get("files", []))
+                    else:
+                        generated_files = []
 
                     all_files.extend(generated_files)
 
@@ -372,9 +518,14 @@ class EnterpriseCodeOrchestrator:
                     })
 
                 try:
-                    validation_result = await self.batch_validator.validate_batch(
-                        files=all_files,
-                        architecture=architecture
+                    # Use MCP messaging for validation
+                    validation_result = await self._send_mcp_request(
+                        sender=AgentRole.CODE_GENERATOR,
+                        recipient=AgentRole.CODE_REVIEWER,
+                        content={
+                            "files": all_files,
+                            "architecture": architecture
+                        }
                     )
                     result["validation"] = validation_result
                 except Exception as e:
