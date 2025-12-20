@@ -325,7 +325,9 @@ class EnterpriseCodeOrchestrator:
         self,
         problem_statement: str,
         constraints: Optional[Dict[str, Any]] = None,
-        on_progress: Optional[callable] = None
+        on_progress: Optional[callable] = None,
+        existing_files: Optional[List[Dict[str, Any]]] = None,
+        existing_architecture: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         NEW: Generate application using 5-batch architecture.
@@ -340,6 +342,8 @@ class EnterpriseCodeOrchestrator:
             problem_statement: Description of what to build
             constraints: Optional constraints (tech preferences, etc.)
             on_progress: Callback for progress updates
+            existing_files: Optional existing files for context-aware modifications
+            existing_architecture: Optional existing architecture for modifications
 
         Returns:
             Complete generated application with all files
@@ -360,21 +364,51 @@ class EnterpriseCodeOrchestrator:
             # ========================================
             # PHASE 1: ARCHITECTURE DESIGN (1 API call via MCP)
             # ========================================
-            if on_progress:
-                await on_progress({
-                    "phase": "architecture",
-                    "message": "🏗️ Analyzing requirements and designing architecture via MCP...",
-                    "progress": 10
-                })
+            if existing_files:
+                logger.info("context_aware_generation",
+                           existing_files_count=len(existing_files),
+                           mode="modification")
+                if on_progress:
+                    await on_progress({
+                        "phase": "architecture",
+                        "message": f"🏗️ Analyzing requirements (with context of {len(existing_files)} existing files)...",
+                        "progress": 10
+                    })
+            else:
+                if on_progress:
+                    await on_progress({
+                        "phase": "architecture",
+                        "message": "🏗️ Analyzing requirements and designing architecture via MCP...",
+                        "progress": 10
+                    })
+
+            # Prepare architecture request with existing context if available
+            arch_request_content = {
+                "problem_statement": problem_statement,
+                "constraints": constraints or {}
+            }
+            
+            # Add existing context for modifications
+            if existing_files:
+                arch_request_content["existing_files"] = [
+                    {
+                        "filepath": f.get("filepath"),
+                        "filename": f.get("filename"),
+                        "purpose": f.get("purpose", ""),
+                        "language": f.get("language", "")
+                    } for f in existing_files[:30]  # Send file list (not full content)
+                ]
+                arch_request_content["is_modification"] = True
+                arch_request_content["modification_context"] = f"Building upon {len(existing_files)} existing files. Consider what's already implemented."
+                
+            if existing_architecture:
+                arch_request_content["previous_architecture"] = existing_architecture
 
             # Use MCP messaging for architecture design
             arch_result = await self._send_mcp_request(
                 sender=AgentRole.ARCHITECT,
                 recipient=AgentRole.ARCHITECT,  # Architect processes its own requests
-                content={
-                    "problem_statement": problem_statement,
-                    "constraints": constraints or {}
-                }
+                content=arch_request_content
             )
 
             architecture = arch_result.get("architecture", {})
@@ -445,17 +479,31 @@ class EnterpriseCodeOrchestrator:
                     })
 
                 try:
+                    # Prepare batch generation request
+                    batch_request = {
+                        "batch_name": batch_name,
+                        "batch_files": batch_files,
+                        "app_description": app_description,
+                        "tech_stack": tech_stack,
+                        "reference_files": reference_files[-2:]  # Last 2 batches for context
+                    }
+                    
+                    # Add existing files context for modifications
+                    if existing_files and i == 0:  # First batch gets existing context
+                        batch_request["existing_files_context"] = [
+                            {
+                                "filepath": f.get("filepath"),
+                                "filename": f.get("filename"),
+                                "language": f.get("language", "")
+                            } for f in existing_files[:10]
+                        ]
+                        batch_request["modification_note"] = "Building upon existing code. Consider what was already implemented."
+                    
                     # Generate batch via MCP (1 API call for multiple files)
                     batch_result = await self._send_mcp_request(
                         sender=AgentRole.ARCHITECT,
                         recipient=AgentRole.CODE_GENERATOR,
-                        content={
-                            "batch_name": batch_name,
-                            "batch_files": batch_files,
-                            "app_description": app_description,
-                            "tech_stack": tech_stack,
-                            "reference_files": reference_files[-2:]  # Last 2 batches for context
-                        }
+                        content=batch_request
                     )
                     
                     # Extract generated files from MCP response
@@ -577,7 +625,9 @@ class EnterpriseCodeOrchestrator:
         self,
         problem_statement: str,
         constraints: Optional[Dict[str, Any]] = None,
-        on_progress: Optional[callable] = None
+        on_progress: Optional[callable] = None,
+        existing_files: Optional[List[Dict[str, Any]]] = None,
+        existing_architecture: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         Generate a complete application from a problem statement.
@@ -589,6 +639,8 @@ class EnterpriseCodeOrchestrator:
             problem_statement: Description of what to build
             constraints: Optional constraints (tech preferences, etc.)
             on_progress: Callback for progress updates
+            existing_files: Optional existing files for context-aware modifications
+            existing_architecture: Optional existing architecture for modifications
 
         Returns:
             Complete generated application with all files
@@ -596,7 +648,8 @@ class EnterpriseCodeOrchestrator:
         # Route to new batch-based generation
         if self.use_batch_mode:
             return await self.generate_application_batch(
-                problem_statement, constraints, on_progress
+                problem_statement, constraints, on_progress, 
+                existing_files, existing_architecture
             )
 
         # OLD approach (kept for backward compatibility)
@@ -876,6 +929,135 @@ class EnterpriseCodeOrchestrator:
         """
         result = await self.generate_application(problem_statement)
         return result.get("files", [])
+    
+    async def smart_modify_files(
+        self,
+        modification_request: str,
+        existing_files: List[Dict[str, Any]],
+        architecture: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Smart modification: Only regenerate files affected by the change request.
+        
+        Uses keyword matching to identify affected files (TODO: Use LLM for smarter analysis)
+        
+        Returns:
+            Dictionary with modified files and metadata
+        """
+        # Simple heuristic: identify affected files based on keywords in modification request
+        modification_lower = modification_request.lower()
+        
+        affected_file_specs = []
+        
+        # Extract file types and components mentioned
+        for file_info in existing_files:
+            filepath = file_info.get("filepath", "").lower()
+            filename = file_info.get("filename", "").lower()
+            
+            # Check if file is mentioned or related to modification
+            should_modify = False
+            
+            # Direct file mention
+            if filename.replace(".tsx", "").replace(".ts", "").replace(".jsx", "").replace(".js", "") in modification_lower:
+                should_modify = True
+            
+            # Component mention
+            if "component" in modification_lower and ("component" in filepath or filepath.endswith(".tsx") or filepath.endswith(".jsx")):
+                should_modify = True
+            
+            # Style/CSS mention
+            if any(word in modification_lower for word in ["style", "css", "color", "design", "theme"]):
+                if "css" in filepath or "style" in filepath or "globals" in filepath:
+                    should_modify = True
+            
+            # API/route mention
+            if any(word in modification_lower for word in ["api", "endpoint", "route", "backend"]):
+                if "api" in filepath or "route" in filepath:
+                    should_modify = True
+            
+            # Schema/database mention
+            if any(word in modification_lower for word in ["schema", "database", "model", "type"]):
+                if "schema" in filepath or "types" in filepath or "model" in filepath:
+                    should_modify = True
+            
+            # Page mention
+            if "page" in modification_lower and "page" in filepath:
+                should_modify = True
+            
+            if should_modify:
+                affected_file_specs.append({
+                    "filepath": file_info.get("filepath"),
+                    "filename": file_info.get("filename"),
+                    "purpose": f"Modified: {modification_request[:100]}",
+                    "language": file_info.get("language", "typescript"),
+                    "category": file_info.get("category", "frontend")
+                })
+        
+        # If no specific files identified, return fallback
+        if not affected_file_specs:
+            logger.info("smart_modification_no_matches", 
+                       modification=modification_request[:50])
+            # Return existing files unchanged - let full regeneration handle it
+            return {
+                "files": existing_files,
+                "modified_count": 0,
+                "total_count": len(existing_files),
+                "modification_type": "none",
+                "affected_files": []
+            }
+        
+        logger.info("smart_modification_identified_files",
+                   count=len(affected_file_specs),
+                   files=[f.get("filepath") for f in affected_file_specs[:5]])
+        
+        # Regenerate only affected files
+        modified_files = []
+        for file_spec in affected_file_specs[:10]:  # Limit to 10 files
+            try:
+                # Generate the modified file via MCP
+                file_result = await self._send_mcp_request(
+                    sender=AgentRole.ARCHITECT,
+                    recipient=AgentRole.CODE_GENERATOR,
+                    content={
+                        "batch_name": "Modification",
+                        "batch_files": [file_spec],
+                        "app_description": f"Modification: {modification_request}",
+                        "tech_stack": architecture.get("tech_stack", {}),
+                        "reference_files": existing_files[-5:]  # Recent files for context
+                    }
+                )
+                
+                # Extract generated files
+                if isinstance(file_result, dict):
+                    gen_files = file_result.get("data", file_result.get("files", []))
+                elif isinstance(file_result, list):
+                    gen_files = file_result
+                else:
+                    gen_files = []
+                
+                modified_files.extend(gen_files)
+                
+            except Exception as e:
+                logger.error("smart_modification_file_failed", 
+                           filepath=file_spec.get("filepath"), 
+                           error=str(e))
+                continue
+        
+        # Merge modified files with existing files
+        existing_file_map = {f.get("filepath"): f for f in existing_files}
+        
+        for mod_file in modified_files:
+            existing_file_map[mod_file.get("filepath")] = mod_file
+        
+        final_files = list(existing_file_map.values())
+        
+        return {
+            "files": final_files,
+            "modified_count": len(modified_files),
+            "total_count": len(final_files),
+            "modification_type": "smart",
+            "affected_files": [f.get("filepath") for f in modified_files]
+        }
 
 
 # Global orchestrator instance
@@ -1127,8 +1309,10 @@ async def process_message_stream(
                 yield f"data: {json.dumps({'type': 'file_generated', 'data': file_data})}\n\n"
                 await asyncio.sleep(0.05)  # Small delay for smooth streaming
 
-            # Update conversation phase
+            # Update conversation phase and store generated data for modifications
             conv.phase = ConversationPhase.CODE_GENERATED
+            conv.context["generated_files"] = generated_files
+            conv.context["architecture"] = architecture
 
             # Send completion event
             total_files = len(generated_files)
@@ -1141,22 +1325,119 @@ async def process_message_stream(
                        conversation_id=conv.conversation_id)
         
         elif conv.phase == ConversationPhase.CODE_GENERATED:
-            # Handle modification requests
-            yield f"data: {json.dumps({'type': 'phase_change', 'data': {'phase': 'modification', 'message': '🔄 Processing modification request...'}})}\n\n"
+            # Handle modification requests - SMART modification instead of full regeneration
+            yield f"data: {json.dumps({'type': 'phase_change', 'data': {'phase': 'modification', 'message': '🔄 Analyzing modification request...'}})}\n\n"
             
-            # Append modification to problem statement
-            modified_statement = f"{conv.problem_statement}\n\n## MODIFICATION REQUEST:\n{message}"
+            # Get existing files and architecture from conversation context
+            existing_files = conv.context.get("generated_files", [])
+            architecture = conv.context.get("architecture", {})
             
-            # Re-run with modifications
-            result = await orchestrator.generate_application(modified_statement)
+            modification_lower = message.lower()
             
-            for file_data in result.get("files", []):
-                yield f"data: {json.dumps({'type': 'file_generated', 'data': file_data})}\n\n"
-                await asyncio.sleep(0.05)
+            # Check if this is a small/targeted modification
+            targeted_keywords = [
+                "change color", "update text", "fix typo", "change name", "rename",
+                "modify style", "update button", "change label", "fix bug",
+                "add function", "update function", "change css", "update component",
+                "fix error", "change variable", "update import"
+            ]
             
-            files_count = len(result.get("files", []))
-            success_message = f"🎉 Applied modifications! Generated {files_count} files."
-            yield f"data: {json.dumps({'type': 'code_generated', 'data': {'message': success_message, 'files': result.get('files', [])}})}\n\n"
+            is_targeted_modification = any(keyword in modification_lower for keyword in targeted_keywords)
+            
+            if is_targeted_modification and existing_files:
+                # Smart modification - only regenerate affected files
+                yield f"data: {json.dumps({'type': 'phase_change', 'data': {'phase': 'smart_modification', 'message': '✨ Identifying affected files for targeted update...'}})}\n\n"
+                
+                try:
+                    # Use smart modification method
+                    smart_result = await orchestrator.smart_modify_files(
+                        modification_request=message,
+                        existing_files=existing_files,
+                        architecture=architecture
+                    )
+                    
+                    modified_count = smart_result.get("modified_count", 0)
+                    total_count = smart_result.get("total_count", 0)
+                    affected_files_list = smart_result.get("affected_files", [])
+                    
+                    yield f"data: {json.dumps({'type': 'message', 'data': {'message': f'💡 Smart modification: Updated {modified_count} file(s), kept {total_count - modified_count} unchanged.'}})}\n\n"
+                    
+                    if affected_files_list:
+                        files_list = ", ".join([f.split("/")[-1] for f in affected_files_list[:5]])
+                        yield f"data: {json.dumps({'type': 'message', 'data': {'message': f'📝 Modified files: {files_list}'}})}\n\n"
+                    
+                    result_files = smart_result.get("files", existing_files)
+                    
+                    # Stream the results
+                    for file_data in result_files:
+                        yield f"data: {json.dumps({'type': 'file_generated', 'data': file_data})}\n\n"
+                        await asyncio.sleep(0.02)
+                    
+                    # Update stored files
+                    conv.context["generated_files"] = result_files
+                    
+                    files_count = len(result_files)
+                    success_message = f"🎉 Smart modification complete! Updated {modified_count} file(s) out of {files_count} total."
+                    yield f"data: {json.dumps({'type': 'code_generated', 'data': {'message': success_message, 'files': result_files, 'modification_type': 'smart'}})}\n\n"
+                    
+                    logger.info("smart_modification_complete",
+                              modified_count=modified_count,
+                              total_count=total_count,
+                              conversation_id=conv.conversation_id)
+                    
+                except Exception as e:
+                    logger.error("smart_modification_failed", error=str(e))
+                    # Fallback to full regeneration
+                    yield f"data: {json.dumps({'type': 'message', 'data': {'message': f'⚠️ Smart modification failed, falling back to full regeneration...'}})}\n\n"
+                    is_targeted_modification = False
+            
+            if not is_targeted_modification or not existing_files:
+                # Major modification or no existing files - full regeneration needed
+                if existing_files:
+                    yield f"data: {json.dumps({'type': 'phase_change', 'data': {'phase': 'major_modification', 'message': '🔄 Regenerating project with modifications (context-aware)...'}})}\n\n"
+                    
+                    # Create context-aware problem statement
+                    file_list = "\n".join([f"- {f.get('filepath')}" for f in existing_files[:20]])
+                    modified_statement = f"""{conv.problem_statement}
+
+## EXISTING IMPLEMENTATION
+The following files were already generated:
+{file_list}
+
+## MODIFICATION REQUEST
+{message}
+
+IMPORTANT: Consider the existing implementation when making changes. Build upon what exists rather than starting from scratch."""
+                else:
+                    yield f"data: {json.dumps({'type': 'phase_change', 'data': {'phase': 'generation', 'message': '🔄 Generating project...'}})}\n\n"
+                    modified_statement = f"{conv.problem_statement}\n\n## MODIFICATION REQUEST:\n{message}" if message != conv.problem_statement else conv.problem_statement
+                
+                # Re-run with modifications - PASS EXISTING FILES AS CONTEXT
+                result = await orchestrator.generate_application(
+                    problem_statement=modified_statement,
+                    constraints={},
+                    on_progress=None,
+                    existing_files=existing_files if existing_files else None,
+                    existing_architecture=architecture if architecture else None
+                )
+                
+                # Stream the results
+                result_files = result.get("files", [])
+                for file_data in result_files:
+                    yield f"data: {json.dumps({'type': 'file_generated', 'data': file_data})}\n\n"
+                    await asyncio.sleep(0.05)
+                
+                # Update stored files and architecture
+                conv.context["generated_files"] = result_files
+                conv.context["architecture"] = result.get("architecture", architecture)
+                
+                files_count = len(result_files)
+                success_message = f"🎉 Full regeneration complete! Generated {files_count} files."
+                yield f"data: {json.dumps({'type': 'code_generated', 'data': {'message': success_message, 'files': result_files, 'modification_type': 'full'}})}\n\n"
+                
+                logger.info("full_regeneration_complete",
+                          files_count=files_count,
+                          conversation_id=conv.conversation_id)
         
         # Send completion event
         yield f"data: {json.dumps({'type': 'message_end', 'data': {'message': '', 'conversation_id': conv.conversation_id}})}\n\n"

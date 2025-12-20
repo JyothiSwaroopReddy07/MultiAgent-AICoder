@@ -618,6 +618,18 @@ function ChatApp() {
                   </div>
                   <div className="flex items-center gap-2">
                     <button
+                      onClick={() => {
+                        const iframe = document.querySelector('iframe[title="Application Preview"]') as HTMLIFrameElement;
+                        if (iframe && appExecution.url) {
+                          iframe.src = appExecution.url;
+                        }
+                      }}
+                      className="p-2 hover:bg-gray-700 rounded-lg transition-colors"
+                      title="Refresh preview"
+                    >
+                      <RefreshCw size={18} className="text-gray-400 hover:text-white" />
+                    </button>
+                    <button
                       onClick={openPreviewWindow}
                       className="btn-primary flex items-center gap-2 text-sm"
                       title="Open in new window"
@@ -644,38 +656,19 @@ function ChatApp() {
                   </div>
                 </div>
                 
-                <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-gray-800 to-gray-900 p-8">
-                  <div className="text-center max-w-lg">
-                    <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center shadow-lg shadow-emerald-500/30">
-                      <Globe size={40} className="text-white" />
-                    </div>
-                    <h3 className="text-2xl font-bold text-white mb-3">
-                      Application Running!
-                    </h3>
-                    <p className="text-gray-400 mb-6">
-                      Your generated application is now running at:
-                    </p>
-                    <div className="bg-gray-800 rounded-xl p-4 mb-6 border border-gray-700">
-                      <code className="text-emerald-400 text-lg font-mono">{appExecution.url}</code>
-                    </div>
-                    <div className="flex flex-col gap-3">
-                      <button
-                        onClick={openPreviewWindow}
-                        className="btn-execute w-full flex items-center justify-center gap-3"
-                      >
-                        <Maximize2 size={20} />
-                        <span>Open in New Window</span>
-                      </button>
-                      <a
-                        href={appExecution.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="btn-secondary w-full flex items-center justify-center gap-3"
-                      >
-                        <ExternalLink size={20} />
-                        <span>Open in Browser Tab</span>
-                      </a>
-                    </div>
+                {/* Embedded iframe preview */}
+                <div className="flex-1 relative bg-white overflow-hidden">
+                  <iframe
+                    src={appExecution.url}
+                    className="absolute inset-0 w-full h-full border-0"
+                    title="Application Preview"
+                    sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals allow-downloads"
+                    allow="accelerometer; camera; encrypted-media; geolocation; gyroscope; microphone; midi; payment; usb"
+                  />
+                  {/* Loading overlay */}
+                  <div className="absolute top-4 right-4 bg-black/70 backdrop-blur-sm rounded-lg px-3 py-1.5 flex items-center gap-2 pointer-events-none">
+                    <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                    <span className="text-xs text-white font-medium">Live Preview</span>
                   </div>
                 </div>
               </>

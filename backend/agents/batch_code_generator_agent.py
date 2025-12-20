@@ -80,10 +80,12 @@ Return ONLY the files in the specified format. No explanations before or after."
         batch_files: List[Dict[str, Any]],
         app_description: str,
         tech_stack: Dict[str, Any],
-        reference_files: Optional[List[Dict[str, Any]]] = None
+        reference_files: Optional[List[Dict[str, Any]]] = None,
+        existing_files_context: Optional[List[Dict[str, Any]]] = None,
+        modification_note: str = ""
     ) -> List[Dict[str, Any]]:
         """
-        Generate a batch of files in one API call.
+        Generate a batch of files in one API call with optional modification context.
 
         Args:
             batch_name: Name of the batch (e.g., "Skeleton", "Components")
@@ -91,6 +93,8 @@ Return ONLY the files in the specified format. No explanations before or after."
             app_description: Brief 1-2 sentence app description
             tech_stack: Technology stack info
             reference_files: Optional reference files (truncated)
+            existing_files_context: Existing files for modification context
+            modification_note: Note about building upon existing code
 
         Returns:
             List of generated files
@@ -99,7 +103,8 @@ Return ONLY the files in the specified format. No explanations before or after."
 
         try:
             prompt = self._build_batch_prompt(
-                batch_name, batch_files, app_description, tech_stack, reference_files
+                batch_name, batch_files, app_description, tech_stack, reference_files,
+                existing_files_context, modification_note
             )
 
             logger.info("generating_batch",
@@ -132,13 +137,15 @@ Return ONLY the files in the specified format. No explanations before or after."
             raise
 
     async def process_task(self, task_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Process a batch generation task"""
+        """Process a batch generation task with optional modification context"""
         return await self.generate_batch(
             batch_name=task_data.get("batch_name", "Batch"),
             batch_files=task_data.get("batch_files", []),
             app_description=task_data.get("app_description", ""),
             tech_stack=task_data.get("tech_stack", {}),
-            reference_files=task_data.get("reference_files", [])
+            reference_files=task_data.get("reference_files", []),
+            existing_files_context=task_data.get("existing_files_context", []),
+            modification_note=task_data.get("modification_note", "")
         )
 
     def _build_batch_prompt(
@@ -147,10 +154,12 @@ Return ONLY the files in the specified format. No explanations before or after."
         batch_files: List[Dict[str, Any]],
         app_description: str,
         tech_stack: Dict[str, Any],
-        reference_files: Optional[List[Dict[str, Any]]]
+        reference_files: Optional[List[Dict[str, Any]]],
+        existing_files_context: Optional[List[Dict[str, Any]]] = None,
+        modification_note: str = ""
     ) -> str:
         """
-        Build minimal context prompt for batch generation.
+        Build minimal context prompt for batch generation with modification awareness.
         
         Optimized for token efficiency: ~1,500-2,000 tokens per batch
         (compared to 4,800 tokens per file in the single-file approach)
@@ -165,6 +174,24 @@ Return ONLY the files in the specified format. No explanations before or after."
 - Frontend: {frontend.get('framework', 'N/A')} + {frontend.get('language', 'N/A')} + {frontend.get('styling', 'N/A')}
 - Backend: {backend.get('framework', 'N/A')}
 - Database: {database.get('primary', 'N/A')} + {database.get('orm', 'N/A')}"""
+        
+        # Add existing context for modifications
+        existing_context = ""
+        if existing_files_context:
+            file_summaries = []
+            for f in existing_files_context[:20]:  # Limit to 20 most relevant
+                file_summaries.append(f"- {f.get('filepath')} ({f.get('language', 'unknown')}) - {f.get('purpose', '')}")
+            
+            existing_context = f"""
+## EXISTING IMPLEMENTATION CONTEXT
+
+{modification_note}
+
+**Key Existing Files:**
+{chr(10).join(file_summaries)}
+
+⚠️ This is a modification/regeneration. Consider the existing implementation and maintain consistency with previously generated code.
+"""
 
         # Detect framework for module format
         framework = frontend.get('framework', '').lower()
@@ -191,12 +218,13 @@ Return ONLY the files in the specified format. No explanations before or after."
                 content = ref.get('content', '')[:800]  # Truncate to 800 chars
                 reference_context += f"\n`{ref.get('filepath')}`:\n```\n{content}...\n```\n"
 
-        # Build prompt (total: ~1,700 tokens)
+        # Build prompt (total: ~1,700-2,000 tokens with context)
         prompt = f"""Generate {len(batch_files)} files for the **{batch_name}** batch.
 
 **App**: {app_description}
 
 {tech_summary}{module_hint}
+{existing_context}
 {file_specs}
 {reference_context}
 
@@ -216,6 +244,7 @@ Return ONLY the files in the specified format. No explanations before or after."
 3. Production-ready code
 4. Use the exact file paths listed above
 5. Follow tech stack conventions
+6. If modifying existing code, maintain consistency and consider what's already implemented
 
 Generate all {len(batch_files)} files now."""
 

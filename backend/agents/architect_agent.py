@@ -86,7 +86,8 @@ Rules: Use Next.js 14 + TypeScript + Tailwind + better-sqlite3 for web apps.
         Analyze problem statement and design complete architecture
         
         Args:
-            task_data: Contains 'problem_statement' and optional 'constraints'
+            task_data: Contains 'problem_statement' and optional 'constraints',
+                      'existing_files', 'is_modification', 'previous_architecture'
             
         Returns:
             Complete architecture design
@@ -96,13 +97,26 @@ Rules: Use Next.js 14 + TypeScript + Tailwind + better-sqlite3 for web apps.
         try:
             problem_statement = task_data.get("problem_statement", "")
             constraints = task_data.get("constraints", {})
+            existing_files = task_data.get("existing_files", [])
+            is_modification = task_data.get("is_modification", False)
+            previous_architecture = task_data.get("previous_architecture", {})
+            modification_context = task_data.get("modification_context", "")
             
             logger.info(
                 "architecture_design_started",
-                problem_length=len(problem_statement)
+                problem_length=len(problem_statement),
+                is_modification=is_modification,
+                existing_files_count=len(existing_files)
             )
             
-            prompt = self._build_architecture_prompt(problem_statement, constraints)
+            prompt = self._build_architecture_prompt(
+                problem_statement, 
+                constraints,
+                existing_files,
+                is_modification,
+                previous_architecture,
+                modification_context
+            )
             
             response = await self.call_llm(
                 messages=[{"role": "user", "content": prompt}],
@@ -133,9 +147,13 @@ Rules: Use Next.js 14 + TypeScript + Tailwind + better-sqlite3 for web apps.
     def _build_architecture_prompt(
         self,
         problem_statement: str,
-        constraints: Dict[str, Any]
+        constraints: Dict[str, Any],
+        existing_files: List[Dict[str, Any]] = None,
+        is_modification: bool = False,
+        previous_architecture: Dict[str, Any] = None,
+        modification_context: str = ""
     ) -> str:
-        """Build the prompt for architecture design"""
+        """Build the prompt for architecture design with context awareness"""
         constraint_text = ""
         if constraints:
             constraint_text = f"""
@@ -143,11 +161,40 @@ Rules: Use Next.js 14 + TypeScript + Tailwind + better-sqlite3 for web apps.
 {json.dumps(constraints, indent=2)}
 """
         
-        return f"""Analyze this software project requirement and design a complete system architecture.
+        # Add existing implementation context for modifications
+        existing_context = ""
+        if is_modification and existing_files:
+            file_list = "\n".join([f"- {f.get('filepath')} ({f.get('language', 'unknown')}) - {f.get('purpose', '')}" 
+                                  for f in existing_files[:30]])
+            previous_tech = ""
+            if previous_architecture:
+                prev_tech_stack = previous_architecture.get("tech_stack", {})
+                if prev_tech_stack:
+                    previous_tech = f"\n\n**Previous Tech Stack:**\n{json.dumps(prev_tech_stack, indent=2)}"
+            
+            existing_context = f"""
+## EXISTING IMPLEMENTATION (MODIFICATION MODE)
+
+{modification_context}
+
+**Currently Implemented Files ({len(existing_files)} total):**
+{file_list}
+{previous_tech}
+
+⚠️ IMPORTANT: This is a MODIFICATION request, not a new project.
+- Consider what's already implemented
+- Build upon existing architecture
+- Maintain consistency with existing tech stack
+- Identify what's MISSING or needs to be CHANGED
+- Don't recreate what already works
+"""
+        
+        base_instruction = """Analyze this software project requirement and design a complete system architecture.
 
 ## Problem Statement
-{problem_statement}
-{constraint_text}
+{problem}
+{constraints}
+{existing}
 
 ## Your Task
 
@@ -164,6 +211,12 @@ Be thorough and comprehensive. For complex applications, you may need 50-100+ fi
 Include tests, documentation, CI/CD, Docker files, environment configs, etc.
 
 Respond with a complete JSON architecture document as specified in your system prompt."""
+        
+        return base_instruction.format(
+            problem=problem_statement,
+            constraints=constraint_text,
+            existing=existing_context
+        )
 
     def _parse_architecture_response(self, response: str) -> Dict[str, Any]:
         """Parse the architecture response from LLM"""
