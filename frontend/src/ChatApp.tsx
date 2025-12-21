@@ -809,7 +809,7 @@ function ChatApp() {
               <Sparkles className="text-cyan-400" size={26} />
               <div>
                 <h1 className="text-lg font-bold text-white">
-                  AI Code Generator
+                  AgentOverflow
                 </h1>
                 <p className="text-xs text-gray-400">
                   Enterprise Multi-Agent Platform

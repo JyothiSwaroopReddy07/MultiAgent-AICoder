@@ -961,6 +961,11 @@ class EnterpriseCodeOrchestrator:
             if filename.replace(".tsx", "").replace(".ts", "").replace(".jsx", "").replace(".js", "") in modification_lower:
                 should_modify = True
             
+            # Dependency/package management
+            if any(word in modification_lower for word in ["dependenc", "package", "install", "library", "npm", "pip"]):
+                if "package.json" in filename or "requirements.txt" in filename or "pyproject.toml" in filename or "composer.json" in filename:
+                    should_modify = True
+            
             # Component mention
             if "component" in modification_lower and ("component" in filepath or filepath.endswith(".tsx") or filepath.endswith(".jsx")):
                 should_modify = True
@@ -983,6 +988,11 @@ class EnterpriseCodeOrchestrator:
             # Page mention
             if "page" in modification_lower and "page" in filepath:
                 should_modify = True
+            
+            # Config file mentions
+            if any(word in modification_lower for word in ["config", "env", "environment"]):
+                if "config" in filename or ".env" in filename or "settings" in filename:
+                    should_modify = True
             
             if should_modify:
                 affected_file_specs.append({
@@ -1336,10 +1346,22 @@ async def process_message_stream(
             
             # Check if this is a small/targeted modification
             targeted_keywords = [
+                # Visual/styling changes
                 "change color", "update text", "fix typo", "change name", "rename",
-                "modify style", "update button", "change label", "fix bug",
-                "add function", "update function", "change css", "update component",
-                "fix error", "change variable", "update import"
+                "modify style", "update button", "change label", "change css",
+                
+                # Code fixes
+                "fix bug", "fix error", "update function", "change variable", "update import",
+                
+                # Component updates
+                "update component", "modify component",
+                
+                # Dependency/config management (needs specific file detection)
+                "add dependenc", "add package", "install package", "update package",
+                "add library", "install library",
+                
+                # File-specific patterns
+                " to ", " in ", " the "  # Catches "add X to Y", "include X in Y"
             ]
             
             is_targeted_modification = any(keyword in modification_lower for keyword in targeted_keywords)
@@ -1392,13 +1414,95 @@ async def process_message_stream(
                     is_targeted_modification = False
             
             if not is_targeted_modification or not existing_files:
-                # Major modification or no existing files - full regeneration needed
-                if existing_files:
-                    yield f"data: {json.dumps({'type': 'phase_change', 'data': {'phase': 'major_modification', 'message': '🔄 Regenerating project with modifications (context-aware)...'}})}\n\n"
+                # Major modification or no existing files
+                
+                # Check if this is an ADDITIVE request (add new stuff) vs FULL REDESIGN
+                additive_keywords = [
+                    "add", "include", "create", "missing",
+                    "don't have", "doesn't have", "without", "forgot to"
+                ]
+                
+                is_additive = existing_files and any(keyword in modification_lower for keyword in additive_keywords)
+                
+                if is_additive:
+                    # ADDITIVE MODE: Generate only new files, keep existing ones
+                    yield f"data: {json.dumps({'type': 'phase_change', 'data': {'phase': 'additive_generation', 'message': '➕ Generating missing components (keeping existing files intact)...'}})}\n\n"
                     
-                    # Create context-aware problem statement
+                    # Create additive problem statement
                     file_list = "\n".join([f"- {f.get('filepath')}" for f in existing_files[:20]])
-                    modified_statement = f"""{conv.problem_statement}
+                    tech_stack = architecture.get("tech_stack", {})
+                    
+                    additive_statement = f"""You already have a {conv.problem_statement} with the following files:
+
+## EXISTING FILES (DO NOT REGENERATE THESE):
+{file_list}
+
+## TECHNOLOGY STACK:
+{json.dumps(tech_stack, indent=2)}
+
+## ADDITIVE REQUEST - GENERATE ONLY WHAT'S MISSING:
+{message}
+
+CRITICAL INSTRUCTIONS:
+1. DO NOT regenerate any existing files
+2. ONLY generate the NEW files/features requested
+3. Make sure new code integrates with existing architecture
+4. Follow the same tech stack and patterns as existing code
+5. Keep existing files completely unchanged"""
+                    
+                    # Generate only new files
+                    result = await orchestrator.generate_application_batch(
+                        problem_statement=additive_statement,
+                        constraints={},
+                        on_progress=None,
+                        existing_files=existing_files,
+                        existing_architecture=architecture
+                    )
+                    
+                    # Get newly generated files
+                    new_files = result.get("files", [])
+                    
+                    # Merge with existing files (keeping existing ones, adding only truly new ones)
+                    existing_file_map = {f.get("filepath"): f for f in existing_files}
+                    new_file_count = 0
+                    
+                    for new_file in new_files:
+                        filepath = new_file.get("filepath")
+                        if filepath not in existing_file_map:
+                            existing_file_map[filepath] = new_file
+                            new_file_count += 1
+                        else:
+                            # File already exists - skip to preserve original
+                            logger.info("additive_skipping_existing_file", filepath=filepath)
+                    
+                    result_files = list(existing_file_map.values())
+                    
+                    # Stream all files (including existing ones for UI consistency)
+                    for file_data in result_files:
+                        yield f"data: {json.dumps({'type': 'file_generated', 'data': file_data})}\n\n"
+                        await asyncio.sleep(0.02)
+                    
+                    # Update stored files
+                    conv.context["generated_files"] = result_files
+                    conv.context["architecture"] = architecture  # Keep original architecture
+                    
+                    success_message = f"✅ Added {new_file_count} new file(s), kept {len(existing_files)} existing file(s) unchanged!"
+                    yield f"data: {json.dumps({'type': 'code_generated', 'data': {'message': success_message, 'files': result_files, 'modification_type': 'additive'}})}\n\n"
+                    
+                    logger.info("additive_generation_complete",
+                              new_files=new_file_count,
+                              existing_files=len(existing_files),
+                              total_files=len(result_files),
+                              conversation_id=conv.conversation_id)
+                
+                else:
+                    # FULL REGENERATION MODE (for major redesigns)
+                    if existing_files:
+                        yield f"data: {json.dumps({'type': 'phase_change', 'data': {'phase': 'major_modification', 'message': '🔄 Regenerating project with modifications (context-aware)...'}})}\n\n"
+                        
+                        # Create context-aware problem statement
+                        file_list = "\n".join([f"- {f.get('filepath')}" for f in existing_files[:20]])
+                        modified_statement = f"""{conv.problem_statement}
 
 ## EXISTING IMPLEMENTATION
 The following files were already generated:
@@ -1408,36 +1512,36 @@ The following files were already generated:
 {message}
 
 IMPORTANT: Consider the existing implementation when making changes. Build upon what exists rather than starting from scratch."""
-                else:
-                    yield f"data: {json.dumps({'type': 'phase_change', 'data': {'phase': 'generation', 'message': '🔄 Generating project...'}})}\n\n"
-                    modified_statement = f"{conv.problem_statement}\n\n## MODIFICATION REQUEST:\n{message}" if message != conv.problem_statement else conv.problem_statement
-                
-                # Re-run with modifications - PASS EXISTING FILES AS CONTEXT
-                result = await orchestrator.generate_application(
-                    problem_statement=modified_statement,
-                    constraints={},
-                    on_progress=None,
-                    existing_files=existing_files if existing_files else None,
-                    existing_architecture=architecture if architecture else None
-                )
-                
-                # Stream the results
-                result_files = result.get("files", [])
-                for file_data in result_files:
-                    yield f"data: {json.dumps({'type': 'file_generated', 'data': file_data})}\n\n"
-                    await asyncio.sleep(0.05)
-                
-                # Update stored files and architecture
-                conv.context["generated_files"] = result_files
-                conv.context["architecture"] = result.get("architecture", architecture)
-                
-                files_count = len(result_files)
-                success_message = f"🎉 Full regeneration complete! Generated {files_count} files."
-                yield f"data: {json.dumps({'type': 'code_generated', 'data': {'message': success_message, 'files': result_files, 'modification_type': 'full'}})}\n\n"
-                
-                logger.info("full_regeneration_complete",
-                          files_count=files_count,
-                          conversation_id=conv.conversation_id)
+                    else:
+                        yield f"data: {json.dumps({'type': 'phase_change', 'data': {'phase': 'generation', 'message': '🔄 Generating project...'}})}\n\n"
+                        modified_statement = f"{conv.problem_statement}\n\n## MODIFICATION REQUEST:\n{message}" if message != conv.problem_statement else conv.problem_statement
+                    
+                    # Re-run with modifications - PASS EXISTING FILES AS CONTEXT
+                    result = await orchestrator.generate_application_batch(
+                        problem_statement=modified_statement,
+                        constraints={},
+                        on_progress=None,
+                        existing_files=existing_files if existing_files else None,
+                        existing_architecture=architecture if architecture else None
+                    )
+                    
+                    # Stream the results
+                    result_files = result.get("files", [])
+                    for file_data in result_files:
+                        yield f"data: {json.dumps({'type': 'file_generated', 'data': file_data})}\n\n"
+                        await asyncio.sleep(0.05)
+                    
+                    # Update stored files and architecture
+                    conv.context["generated_files"] = result_files
+                    conv.context["architecture"] = result.get("architecture", architecture)
+                    
+                    files_count = len(result_files)
+                    success_message = f"🎉 Full regeneration complete! Generated {files_count} files."
+                    yield f"data: {json.dumps({'type': 'code_generated', 'data': {'message': success_message, 'files': result_files, 'modification_type': 'full'}})}\n\n"
+                    
+                    logger.info("full_regeneration_complete",
+                              files_count=files_count,
+                              conversation_id=conv.conversation_id)
         
         # Send completion event
         yield f"data: {json.dumps({'type': 'message_end', 'data': {'message': '', 'conversation_id': conv.conversation_id}})}\n\n"
