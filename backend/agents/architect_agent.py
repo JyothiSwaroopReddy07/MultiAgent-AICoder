@@ -101,12 +101,14 @@ Rules: Use Next.js 14 + TypeScript + Tailwind + better-sqlite3 for web apps.
             is_modification = task_data.get("is_modification", False)
             previous_architecture = task_data.get("previous_architecture", {})
             modification_context = task_data.get("modification_context", "")
+            feature_plan = task_data.get("feature_plan", None)
             
             logger.info(
                 "architecture_design_started",
                 problem_length=len(problem_statement),
                 is_modification=is_modification,
-                existing_files_count=len(existing_files)
+                existing_files_count=len(existing_files),
+                has_feature_plan=bool(feature_plan)
             )
             
             prompt = self._build_architecture_prompt(
@@ -115,7 +117,8 @@ Rules: Use Next.js 14 + TypeScript + Tailwind + better-sqlite3 for web apps.
                 existing_files,
                 is_modification,
                 previous_architecture,
-                modification_context
+                modification_context,
+                feature_plan
             )
             
             response = await self.call_llm(
@@ -151,7 +154,8 @@ Rules: Use Next.js 14 + TypeScript + Tailwind + better-sqlite3 for web apps.
         existing_files: List[Dict[str, Any]] = None,
         is_modification: bool = False,
         previous_architecture: Dict[str, Any] = None,
-        modification_context: str = ""
+        modification_context: str = "",
+        feature_plan: Dict[str, Any] = None
     ) -> str:
         """Build the prompt for architecture design with context awareness"""
         constraint_text = ""
@@ -160,6 +164,33 @@ Rules: Use Next.js 14 + TypeScript + Tailwind + better-sqlite3 for web apps.
 ## Constraints & Preferences
 {json.dumps(constraints, indent=2)}
 """
+        
+        # Add approved features section (CRITICAL for complete implementation)
+        features_text = ""
+        if feature_plan:
+            core_features = feature_plan.get("core_features", [])
+            optional_features = feature_plan.get("optional_features", [])
+            
+            features_text = "\n## ⚡ APPROVED FEATURES TO IMPLEMENT (USER-CONFIRMED)\n"
+            features_text += "You MUST implement ALL of these features. Each feature needs corresponding pages, APIs, components, and schemas.\n\n"
+            
+            for i, feature in enumerate(core_features, 1):
+                features_text += f"{i}. **{feature.get('name', 'Feature')}** (Priority: {feature.get('priority', 'medium')}, Complexity: {feature.get('complexity', 'medium')})\n"
+                features_text += f"   - Description: {feature.get('description', '')}\n"
+                features_text += f"   - YOU MUST create all necessary pages, API endpoints, components, and database schemas for this feature\n\n"
+            
+            if optional_features:
+                features_text += "\n### Optional Features (implement if time/feasibility allows):\n"
+                for i, feature in enumerate(optional_features, 1):
+                    features_text += f"{i}. **{feature.get('name')}** (Complexity: {feature.get('complexity', 'low')})\n"
+                    features_text += f"   - {feature.get('description')}\n\n"
+            
+            features_text += "\n⚠️ CRITICAL INSTRUCTION: Your architecture MUST include ALL the core features listed above.\n"
+            features_text += "For EACH feature, ensure you plan:\n"
+            features_text += "   - Corresponding frontend pages/components\n"
+            features_text += "   - Required API endpoints\n"
+            features_text += "   - Database schemas/models\n"
+            features_text += "   - Any necessary utilities or services\n"
         
         # Add existing implementation context for modifications
         existing_context = ""
@@ -194,6 +225,7 @@ Rules: Use Next.js 14 + TypeScript + Tailwind + better-sqlite3 for web apps.
 ## Problem Statement
 {problem}
 {constraints}
+{features}
 {existing}
 
 ## Your Task
@@ -201,20 +233,23 @@ Rules: Use Next.js 14 + TypeScript + Tailwind + better-sqlite3 for web apps.
 1. **Deeply analyze** what this project needs
 2. **Determine** the optimal project type and architecture
 3. **Design** a complete folder structure
-4. **List ALL files** needed for a production-ready application
+4. **List ALL files** needed for a production-ready application (including all pages and APIs for each approved feature)
 5. **Define** the technology stack
 6. **Design** the database schema (if applicable)
 7. **Design** the API (if applicable)
-8. **List** all features to implement
+8. **Implement** all approved features listed above
 
 Be thorough and comprehensive. For complex applications, you may need 50-100+ files.
 Include tests, documentation, CI/CD, Docker files, environment configs, etc.
+
+⚠️ CRITICAL: If features are listed above, you MUST include all necessary files for EACH feature (pages, APIs, components, schemas, etc.)
 
 Respond with a complete JSON architecture document as specified in your system prompt."""
         
         return base_instruction.format(
             problem=problem_statement,
             constraints=constraint_text,
+            features=features_text,
             existing=existing_context
         )
 
