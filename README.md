@@ -1,8 +1,8 @@
-# 🚀 AI Code Generator - Enterprise Multi-Agent Platform
+# AI Code Generator - Enterprise Multi-Agent Platform
 
 An enterprise-grade AI code generation platform that uses multiple specialized agents to generate production-ready applications from natural language descriptions.
 
-## ✨ Features
+## Features
 
 - **Dynamic Architecture Design** - AI determines optimal project structure based on requirements
 - **Multi-Project Support** - Supports frontend, backend, fullstack, microservices, and more
@@ -10,18 +10,18 @@ An enterprise-grade AI code generation platform that uses multiple specialized a
 - **Context-Aware Generation** - Each file knows about types, utilities, and other files
 - **Streaming Output** - Real-time file generation with progress tracking
 
-## 🤖 Agent Architecture
+## Agent Architecture
 
 The platform uses 4 specialized agents working together:
 
 | Agent | Role |
 |-------|------|
-| **🏗️ ArchitectAgent** | Analyzes requirements, designs architecture, chooses tech stack |
-| **📋 FilePlannerAgent** | Plans all files needed based on project complexity |
-| **⚙️ CodeGeneratorAgent** | Generates production-ready code with full context |
-| **🔍 IntegrationValidatorAgent** | Validates all files work together |
+| **ArchitectAgent** | Analyzes requirements, designs architecture, chooses tech stack |
+| **FilePlannerAgent** | Plans all files needed based on project complexity |
+| **CodeGeneratorAgent** | Generates production-ready code with full context |
+| **IntegrationValidatorAgent** | Validates all files work together |
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 ai-coder/
@@ -42,7 +42,7 @@ ai-coder/
 └── start.sh                    # Startup script
 ```
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 - Python 3.10+
@@ -80,7 +80,7 @@ npm start
 
 The UI will be available at http://localhost:3000
 
-## 📡 API Usage
+## API Usage
 
 ### Generate Code
 
@@ -96,7 +96,7 @@ curl -X POST http://localhost:8000/api/chat/message \
 curl http://localhost:8000/api/chat/health
 ```
 
-## 🎯 Example Requests
+## Example Requests
 
 ### Simple App
 ```
@@ -118,14 +118,14 @@ Use FastAPI and PostgreSQL."
 ```
 → Generates Python backend with proper structure
 
-## 🛠️ Technology Stack
+## Technology Stack
 
 - **Backend**: Python, FastAPI, Gemini AI
 - **Frontend**: React, TypeScript, Tailwind CSS
 - **AI**: Google Gemini 2.5 Flash
 - **Infrastructure**: Docker, Nginx
 
-## 📊 Generated Output
+## Generated Output
 
 The platform generates:
 
@@ -138,7 +138,7 @@ The platform generates:
 - ✅ Docker files
 - ✅ Documentation
 
-## 🔧 Configuration
+## Configuration
 
 Edit `backend/config.py` to customize:
 
@@ -148,7 +148,7 @@ gemini_model = "gemini-2.5-flash"
 backend_port = 8000
 ```
 
-## 📝 License
+## License
 
 MIT License
 
